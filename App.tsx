@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from './components/Icon';
+import LandingPage from './views/LandingPage';
 import HomePage from './views/customer/HomePage';
 import ShopPage from './views/customer/pages/ShopPage';
 import AboutUsPage from './views/customer/pages/AboutUsPage';
@@ -31,7 +32,7 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
       <div className="bg-dark text-white text-center py-2 px-4 text-sm font-medium">
         Free shipping on all orders over $50
       </div>
-      
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 border-b border-gray-200">
           <div className="flex items-center">
@@ -55,13 +56,13 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center lg:hidden">
             <button onClick={() => setMenuOpen(!menuOpen)} type="button" className="bg-white p-2 rounded-md text-gray-400">
               <Icon name="menu" className="h-6 w-6" />
             </button>
           </div>
-          
+
           <div className="hidden lg:flex lg:items-center lg:space-x-4">
              <button onClick={() => onNavigate('account')} className="p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors">
                 <Icon name="user" className="h-6 w-6"/>
@@ -89,7 +90,9 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
             <div className="lg:hidden">
                 <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('home'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Home</a>
-                    {/* ... other mobile links */}
+                    <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('shop'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Shop</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('about'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">About</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('contact'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Contact</a>
                 </div>
             </div>
         )}
@@ -107,7 +110,6 @@ const Footer: React.FC = () => (
                     <p className="text-gray-400 text-base">Crafting timeless pieces for the modern lifestyle.</p>
                 </div>
                 <div className="mt-12 grid grid-cols-2 gap-8 xl:mt-0 xl:col-span-2">
-                    {/* ... footer content ... */}
                      <div className="md:grid md:grid-cols-2 md:gap-8">
                         <div>
                             <h3 className="text-sm font-semibold tracking-wider uppercase">Shop</h3>
@@ -152,7 +154,7 @@ const Footer: React.FC = () => (
 
 const AdminSidebar: React.FC<{ currentPage: AdminPage; onNavigate: (page: AdminPage) => void; onLogout: () => void }> = ({ currentPage, onNavigate, onLogout }) => {
     const navItemClasses = (page: AdminPage) => `flex items-center px-4 py-3 text-gray-200 hover:bg-gray-700 rounded-md transition-colors duration-200 ${currentPage === page ? 'bg-primary' : ''}`;
-    
+
     return (
         <aside className="w-64 bg-gray-800 text-white flex flex-col min-h-screen">
             <div className="h-16 flex items-center justify-center text-2xl font-bold border-b border-gray-700">LuxeLane Admin</div>
@@ -173,7 +175,6 @@ const AdminSidebar: React.FC<{ currentPage: AdminPage; onNavigate: (page: AdminP
 };
 
 const ChatbotWidget: React.FC<{isOpen: boolean, onToggle: () => void}> = ({isOpen, onToggle}) => {
-    // Chatbot UI remains the same
     if (!isOpen) {
         return (
             <button onClick={onToggle} className="fixed bottom-6 right-6 bg-primary text-white p-4 rounded-full shadow-lg hover:bg-primary-hover transition-transform transform hover:scale-110 z-50">
@@ -187,8 +188,12 @@ const ChatbotWidget: React.FC<{isOpen: boolean, onToggle: () => void}> = ({isOpe
                 <h3 className="font-bold text-lg">LuxeLane Support</h3>
                 <button onClick={onToggle}><Icon name="x" className="w-6 h-6" /></button>
             </header>
-            <div className="flex-1 p-4 overflow-y-auto bg-gray-50">...</div>
-            <div className="p-2 border-t border-gray-200 bg-white rounded-b-lg">...</div>
+            <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
+                <p className="text-sm text-gray-500">Chat support coming soon...</p>
+            </div>
+            <div className="p-2 border-t border-gray-200 bg-white rounded-b-lg">
+                <input type="text" placeholder="Type your message..." className="w-full p-2 border rounded" />
+            </div>
         </div>
     );
 };
@@ -241,30 +246,54 @@ const AdminView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   );
 };
 
+type AppView = 'landing' | 'auth' | 'authenticated';
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
+  const [view, setView] = useState<AppView>('landing');
+
+  const handleGetStarted = () => {
+    setView('auth');
+  };
 
   const handleLogin = (role: 'customer' | 'admin') => {
     setUser(role === 'admin' ? mockAdminUser : mockUser);
+    setView('authenticated');
   };
 
   const handleLogout = () => {
     setUser(null);
+    setView('landing');
   };
-  
+
+  const handleBackToLanding = () => {
+    setView('landing');
+  };
+
   useEffect(() => {
     document.body.className = user?.role === 'admin' ? 'bg-gray-100 font-sans' : 'bg-white font-sans';
   }, [user]);
 
-  if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
+  // Show Landing Page
+  if (view === 'landing') {
+    return <LandingPage onGetStarted={handleGetStarted} />;
   }
 
-  if (user.role === 'admin') {
-    return <AdminView onLogout={handleLogout} />;
+  // Show Auth/Login Page
+  if (view === 'auth' && !user) {
+    return <LoginPage onLogin={handleLogin} onBackToLanding={handleBackToLanding} />;
   }
-  
-  return <CustomerView onLogout={handleLogout} />;
+
+  // Show Authenticated Views
+  if (view === 'authenticated' && user) {
+    if (user.role === 'admin') {
+      return <AdminView onLogout={handleLogout} />;
+    }
+    return <CustomerView onLogout={handleLogout} />;
+  }
+
+  // Fallback to landing
+  return <LandingPage onGetStarted={handleGetStarted} />;
 };
 
 export default App;
