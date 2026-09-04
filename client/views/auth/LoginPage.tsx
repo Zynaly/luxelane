@@ -40,6 +40,18 @@ const LoginPage: React.FC<LoginPageProps> = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // OTP Verification Modal state
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpDestination, setOtpDestination] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpSuccess, setOtpSuccess] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Floating Toast Notification state
+  const [toast, setToast] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
+
   // Password visibility toggle
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
@@ -103,6 +115,22 @@ const LoginPage: React.FC<LoginPageProps> = ({
   useEffect(() => {
     loadWorldCountries();
   }, []);
+
+  // Auto-dismiss floating toast notification after 6 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Resend OTP countdown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -515,12 +543,28 @@ const LoginPage: React.FC<LoginPageProps> = ({
     // Trigger all validations
     const isValid = validateAll();
     if (!isValid) {
+      setTimeout(() => {
+        const firstErrorKey = Object.keys(errors)[0] || 'name';
+        const el = document.getElementById(firstErrorKey) || document.querySelector(`[name="${firstErrorKey}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          (el as HTMLElement).focus();
+        }
+      }, 50);
+
       setError('Please resolve all validation errors highlighted below.');
+      setToast({
+        type: 'error',
+        message: 'Please resolve all required fields highlighted below before submitting.',
+      });
       return;
     }
 
     setLoading(true);
     try {
+      const destination = signupData.email || signupData.phone_number;
+      setOtpDestination(destination);
+
       if (signupRole === 'vendor') {
         const response = await API.Auth.signupVendor({
           name: signupData.name,
@@ -531,9 +575,11 @@ const LoginPage: React.FC<LoginPageProps> = ({
           display_name: signupData.display_name,
         });
         console.log('Vendor application successful:', response);
-        setSuccess(
-          'Vendor application submitted successfully! Please check your email or phone for verification OTP. Your merchant account is now pending platform review.'
-        );
+        setSuccess('Vendor Partner application submitted successfully!');
+        setToast({
+          type: 'success',
+          message: 'Vendor Application Created! Verification code sent.',
+        });
       } else {
         const response = await API.Auth.signup(signupData);
         console.log('Signup successful:', response);
@@ -558,20 +604,87 @@ const LoginPage: React.FC<LoginPageProps> = ({
           // ignore storage error
         }
 
-        setSuccess('Account created successfully! Please check your email or phone for verification OTP.');
+        setSuccess('Account created successfully!');
+        setToast({
+          type: 'success',
+          message: 'Account Created! Verification code sent to your email.',
+        });
       }
 
-      // Switch to login tab after 2.5 seconds
-      setTimeout(() => {
-        setIsLogin(true);
-        setLoginEmail(signupData.email);
-        setSuccess('');
-      }, 2500);
+      // Open OTP Verification Modal Popup immediately
+      setShowOtpModal(true);
+      setOtpCode('');
+      setOtpError('');
+      setOtpSuccess('');
+      setResendCooldown(60);
     } catch (err: any) {
       console.error('Signup error:', err);
-      setError(err.message || 'Signup failed. Please try again.');
+      const errMsg = err.message || 'Signup failed. Please try again.';
+      setError(errMsg);
+      setToast({ type: 'error', message: errMsg });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // OTP Verification Submission
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpCode.trim() || otpCode.trim().length < 4) {
+      setOtpError('Please enter the 6-digit verification code.');
+      return;
+    }
+
+    setOtpVerifying(true);
+    setOtpError('');
+    setOtpSuccess('');
+
+    try {
+      await API.Auth.verifyOtp({
+        destination: otpDestination,
+        code: otpCode.trim(),
+        purpose: 'register',
+      });
+
+      setOtpSuccess('Account verified successfully! Redirecting to Sign In...');
+      setToast({
+        type: 'success',
+        message: '✓ Account verified successfully! You can now sign in.',
+      });
+
+      setTimeout(() => {
+        setShowOtpModal(false);
+        setIsLogin(true);
+        setLoginEmail(signupData.email || signupData.phone_number);
+        setSuccess('Account verified! Enter your password to sign in.');
+      }, 1500);
+    } catch (err: any) {
+      console.error('OTP verification error:', err);
+      setOtpError(err.message || 'Invalid or expired verification code.');
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  // OTP Resend
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setOtpError('');
+    setOtpSuccess('');
+
+    try {
+      await API.Auth.resendOtp({
+        destination: otpDestination,
+        purpose: 'register',
+      });
+      setResendCooldown(60);
+      setToast({
+        type: 'info',
+        message: `New verification code dispatched to ${otpDestination}.`,
+      });
+    } catch (err: any) {
+      console.error('OTP resend error:', err);
+      setOtpError(err.message || 'Could not resend OTP. Please wait a moment.');
     }
   };
 
@@ -582,6 +695,144 @@ const LoginPage: React.FC<LoginPageProps> = ({
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div className="fixed top-6 right-6 sm:top-8 sm:right-8 z-50 max-w-md w-full animate-fade-in shadow-2xl">
+          <div
+            className={`p-4 rounded-2xl border flex items-start space-x-3 transition-all ${
+              toast.type === 'error'
+                ? 'bg-red-900/95 text-white border-red-700/50 backdrop-blur-md'
+                : toast.type === 'success'
+                ? 'bg-emerald-900/95 text-white border-emerald-700/50 backdrop-blur-md'
+                : 'bg-gray-900/95 text-white border-gray-700 backdrop-blur-md'
+            }`}
+          >
+            <div className="flex-shrink-0 mt-0.5">
+              {toast.type === 'error' && (
+                <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">
+                  !
+                </div>
+              )}
+              {toast.type === 'success' && (
+                <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">
+                  ✓
+                </div>
+              )}
+              {toast.type === 'info' && (
+                <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                  i
+                </div>
+              )}
+            </div>
+            <div className="flex-1 text-sm font-medium leading-snug">
+              {toast.message}
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="text-white/70 hover:text-white p-1"
+            >
+              <Icon name="x" className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── OTP Verification Modal Popup ── */}
+      {showOtpModal && (
+        <div className="fixed inset-0 bg-gray-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 border border-gray-100 relative text-center animate-scale-up">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowOtpModal(false)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <Icon name="x" className="w-5 h-5" />
+            </button>
+
+            {/* Celebratory Icon */}
+            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-inner">
+              <Icon name="check" className="w-8 h-8 text-emerald-600" />
+            </div>
+
+            <h3 className="text-2xl font-serif font-bold text-dark mb-2">
+              {signupRole === 'vendor' ? 'Merchant Application Received' : 'Account Created Successfully!'}
+            </h3>
+
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              We have dispatched an activation code to:
+              <span className="block mt-1.5 font-semibold text-dark font-mono bg-gray-100 py-1.5 px-3 rounded-lg text-xs break-all">
+                {otpDestination}
+              </span>
+            </p>
+
+            {otpError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl text-left">
+                {otpError}
+              </div>
+            )}
+            {otpSuccess && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl text-left">
+                {otpSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+                  Enter 6-Digit Code
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="• • • • • •"
+                  className="appearance-none block w-full text-center text-3xl font-mono tracking-[0.5em] px-4 py-3.5 border-2 border-gray-200 rounded-2xl shadow-sm focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all font-bold"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={otpVerifying || !otpCode.trim()}
+                className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-sm font-semibold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {otpVerifying ? 'Verifying Code...' : 'Verify & Continue to Sign In'}
+              </button>
+
+              <div className="pt-2 flex items-center justify-between text-xs text-gray-500">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0}
+                  className={`font-medium ${
+                    resendCooldown > 0
+                      ? 'text-gray-400 cursor-not-allowed'
+                      : 'text-primary hover:underline font-semibold'
+                  }`}
+                >
+                  {resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : 'Didn’t receive code? Resend'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtpModal(false);
+                    setIsLogin(true);
+                    setLoginEmail(signupData.email || signupData.phone_number);
+                  }}
+                  className="text-gray-500 hover:text-dark font-medium underline"
+                >
+                  Skip for now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {onBackToLanding && (
         <div className="absolute top-6 left-6">
           <button
