@@ -22,13 +22,13 @@ LOGGING = {
     },
 }
 
-# Email to console in dev
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-
 # Relax CORS in dev
 CORS_ALLOW_ALL_ORIGINS = True
 
-DEFAULT_FROM_EMAIL = "noreply@luxelane.com"
+# If EMAIL_HOST_USER is not configured in dev, fallback to console
+if not EMAIL_HOST_USER:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
 
 # Check if Redis is running; if not, fall back cleanly to LocMemCache and eager Celery
 try:
