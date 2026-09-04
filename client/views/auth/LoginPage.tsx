@@ -18,11 +18,13 @@ import {
   AddressSuggestion
 } from '../../services/addressLookupService';
 
+export type SignupRole = 'customer' | 'vendor' | 'supplier' | 'warehouse';
+
 interface LoginPageProps {
   onLogin: (role: 'customer' | 'admin' | 'vendor') => void;
   onBackToLanding?: () => void;
   initialMode?: 'login' | 'signup';
-  initialRole?: 'customer' | 'vendor';
+  initialRole?: SignupRole;
 }
 
 const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
@@ -34,7 +36,10 @@ const LoginPage: React.FC<LoginPageProps> = ({
   initialRole = 'customer',
 }) => {
   const [isLogin, setIsLogin] = useState(initialMode !== 'signup');
-  const [signupRole, setSignupRole] = useState<'customer' | 'vendor'>(initialRole);
+  const [signupRole, setSignupRole] = useState<SignupRole>(initialRole || 'customer');
+  const [signupStep, setSignupStep] = useState<'select-role' | 'form'>(
+    initialMode === 'signup' && initialRole ? 'form' : 'select-role'
+  );
   const [activeTab, setActiveTab] = useState<'customer' | 'admin'>('customer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -243,15 +248,23 @@ const LoginPage: React.FC<LoginPageProps> = ({
         if (value.trim().length < 5) return 'Street address must be at least 5 characters';
         return '';
       case 'legal_name':
-        if (signupRole === 'vendor') {
-          if (!value.trim()) return 'Legal business entity name is required';
+        if (signupRole !== 'customer') {
+          if (!value.trim()) {
+            if (signupRole === 'warehouse') return 'Warehouse facility legal entity name is required';
+            if (signupRole === 'supplier') return 'Supplier business legal entity name is required';
+            return 'Legal business entity name is required';
+          }
           if (value.trim().length < 2) return 'Legal entity name must be at least 2 characters';
         }
         return '';
       case 'display_name':
-        if (signupRole === 'vendor') {
-          if (!value.trim()) return 'Store / Brand display name is required';
-          if (value.trim().length < 2) return 'Store display name must be at least 2 characters';
+        if (signupRole !== 'customer') {
+          if (!value.trim()) {
+            if (signupRole === 'warehouse') return 'Warehouse / Facility name is required';
+            if (signupRole === 'supplier') return 'Supplier / Brand name is required';
+            return 'Store / Brand display name is required';
+          }
+          if (value.trim().length < 2) return 'Name must be at least 2 characters';
         }
         return '';
       default:
@@ -565,7 +578,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
       const destination = signupData.email || signupData.phone_number;
       setOtpDestination(destination);
 
-      if (signupRole === 'vendor') {
+      if (signupRole !== 'customer') {
         const response = await API.Auth.signupVendor({
           name: signupData.name,
           email: signupData.email,
@@ -574,11 +587,18 @@ const LoginPage: React.FC<LoginPageProps> = ({
           legal_name: signupData.legal_name,
           display_name: signupData.display_name,
         });
-        console.log('Vendor application successful:', response);
-        setSuccess('Vendor Partner application submitted successfully!');
+        const roleTitle =
+          signupRole === 'supplier'
+            ? 'Supplier Partner'
+            : signupRole === 'warehouse'
+            ? 'Warehouse Logistics Partner'
+            : 'Vendor Partner';
+
+        console.log(`${roleTitle} application successful:`, response);
+        setSuccess(`${roleTitle} application submitted successfully!`);
         setToast({
           type: 'success',
-          message: 'Vendor Application Created! Verification code sent.',
+          message: `${roleTitle} application received! Verification code sent.`,
         });
       } else {
         const response = await API.Auth.signup(signupData);
@@ -845,288 +865,516 @@ const LoginPage: React.FC<LoginPageProps> = ({
         </div>
       )}
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center">
-        <h1 className="text-4xl sm:text-5xl font-serif font-bold text-dark tracking-tight">LuxeLane</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          {isLogin
-            ? 'Sign in to access your luxury shopping experience or merchant portal'
-            : signupRole === 'vendor'
-            ? 'Partner with LuxeLane to showcase your luxury brand to exclusive collectors'
-            : 'Create an account and enjoy bespoke luxury shopping'}
-        </p>
-      </div>
+      {!isLogin && signupStep === 'select-role' ? (
+        /* ── 1. Select Your Role Step (Pre-signup) ── */
+        <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center animate-fade-in">
+          <h1 className="text-4xl sm:text-5xl font-serif font-bold text-dark tracking-tight">LuxeLane</h1>
+          <h2 className="mt-4 text-3xl font-serif font-bold text-gray-900 tracking-tight">
+            Select Your Role
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Please choose how you will participate in the LuxeLane luxury ecosystem
+          </p>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
-        <div className="bg-white py-8 px-6 shadow-xl sm:rounded-2xl sm:px-10 border border-gray-100">
-
-          {/* Customer / Admin tab for login */}
-          {isLogin && (
-            <div className="mb-6">
-              <div className="border-b border-gray-200">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                  <button
-                    onClick={() => setActiveTab('customer')}
-                    className={`${
-                      activeTab === 'customer'
-                        ? 'border-primary text-primary font-semibold'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-3 px-1 border-b-2 text-sm w-1/2 transition-colors`}
-                  >
-                    Customer
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('admin')}
-                    className={`${
-                      activeTab === 'admin'
-                        ? 'border-primary text-primary font-semibold'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    } whitespace-nowrap py-3 px-1 border-b-2 text-sm w-1/2 transition-colors`}
-                  >
-                    Admin Portal
-                  </button>
-                </nav>
-              </div>
-            </div>
-          )}
-
-          {/* Feedback messages */}
-          {error && (
-            <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-start">
-              <Icon name="x" className="w-5 h-5 mr-2 text-red-500 flex-shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
-          {success && (
-            <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-start">
-              <Icon name="check" className="w-5 h-5 mr-2 text-emerald-500 flex-shrink-0 mt-0.5" />
-              <span>{success}</span>
-            </div>
-          )}
-
-          {/* ── Login Form ─────────────────────────────────────────────────── */}
-          {isLogin ? (
-            <form className="space-y-5" onSubmit={handleLoginSubmit}>
-              <div>
-                <label htmlFor="login-email" className="block text-sm font-medium text-gray-700">
-                  Email address or Phone
-                </label>
-                <div className="mt-1">
-                  <input
-                    id="login-email"
-                    name="email"
-                    type="text"
-                    autoComplete="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder={activeTab === 'admin' ? 'admin@luxelane.com' : 'user@example.com'}
-                    className="appearance-none block w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <div className="mt-1 relative">
-                  <input
-                    id="login-password"
-                    name="password"
-                    type={showLoginPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="appearance-none block w-full px-3.5 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-                    tabIndex={-1}
-                  >
-                    <Icon name={showLoginPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <input
-                    id="remember-me"
-                    name="remember-me"
-                    type="checkbox"
-                    className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
-                  />
-                  <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-                    Remember me
-                  </label>
-                </div>
-
-                <div className="text-sm">
-                  <a href="#" className="font-medium text-primary hover:text-primary-hover">
-                    Forgot password?
-                  </a>
-                </div>
-              </div>
-
-              <div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? 'Signing in...' : 'Sign in'}
-                </button>
-              </div>
-
-              {/* Merchant Apply Link */}
-              <div className="pt-2 text-center border-t border-gray-100">
-                <p className="text-xs text-gray-500">
-                  Are you a luxury brand or merchant?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLogin(false);
-                      setSignupRole('vendor');
-                      setError('');
-                      setSuccess('');
-                      setTouched({});
-                      setErrors({});
-                    }}
-                    className="font-semibold text-primary hover:underline"
-                  >
-                    Apply as a Vendor Partner →
-                  </button>
-                </p>
-              </div>
-            </form>
-          ) : (
-            /* ── Signup Form ────────────────────────────────────────────────── */
-            <form className="space-y-4" onSubmit={handleSignupSubmit} noValidate>
-              {/* Account Type Selector (Customer vs Vendor Partner) */}
-              <div className="p-1 bg-gray-100 rounded-xl flex items-center mb-5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSignupRole('customer');
-                    setErrors({});
-                  }}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                    signupRole === 'customer'
-                      ? 'bg-white text-dark shadow-sm font-semibold'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <Icon name="user" className="w-4 h-4" />
-                  <span>Personal Shopper</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSignupRole('vendor');
-                    setErrors({});
-                  }}
-                  className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                    signupRole === 'vendor'
-                      ? 'bg-primary text-white shadow-sm font-semibold'
-                      : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                >
-                  <Icon name="cart" className="w-4 h-4" />
-                  <span>Vendor Partner (Seller)</span>
-                </button>
-              </div>
-
-              {signupRole === 'vendor' && (
-                <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-xl mb-4 text-left">
-                  <div className="flex items-center space-x-2">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                    </span>
-                    <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                      LuxeLane Merchant Application
-                    </span>
+          <div className="mt-8 bg-white py-8 px-6 shadow-xl sm:rounded-3xl sm:px-8 border border-gray-100 text-left">
+            <div className="space-y-4">
+              {/* Shopper / Customer */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupRole('customer');
+                  setSignupStep('form');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="w-full text-left p-5 rounded-2xl border-2 border-gray-200 hover:border-dark hover:bg-gray-50/80 transition-all group flex items-center justify-between shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-100 text-dark flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform shadow-inner">
+                    🛍️
                   </div>
-                  <p className="mt-1 text-xs text-amber-800 leading-relaxed">
-                    Join our curated luxury marketplace. Complete your business details below. Upon email verification, our merchant curation team will review your application for platform approval.
-                  </p>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-serif font-bold text-lg text-dark group-hover:text-primary">
+                        I AM A SHOPPER
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                        Personal Client
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Discover and acquire fine jewelry, couture, luxury watches, and bespoke collector editions.
+                    </p>
+                  </div>
+                </div>
+                <Icon name="arrow-right" className="w-5 h-5 text-gray-400 group-hover:text-dark group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+              </button>
+
+              {/* Supplier Card (Red theme) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupRole('supplier');
+                  setSignupStep('form');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="w-full text-left p-5 rounded-2xl border-2 border-red-200 hover:border-red-600 bg-red-50/25 hover:bg-red-50/60 transition-all group flex items-center justify-between shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform shadow-sm">
+                    🏭
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-serif font-bold text-lg text-red-950 group-hover:text-red-700">
+                        I AM A SUPPLIER
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-red-100 text-red-800">
+                        Materials & B2B
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Supply precious gemstones, rare textiles, luxury hardware, or wholesale goods to top brands.
+                    </p>
+                  </div>
+                </div>
+                <Icon name="arrow-right" className="w-5 h-5 text-red-400 group-hover:text-red-700 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+              </button>
+
+              {/* Vendor Card (Blue theme) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupRole('vendor');
+                  setSignupStep('form');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="w-full text-left p-5 rounded-2xl border-2 border-sky-200 hover:border-sky-600 bg-sky-50/25 hover:bg-sky-50/60 transition-all group flex items-center justify-between shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-600 text-white flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform shadow-sm">
+                    🏬
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-serif font-bold text-lg text-sky-950 group-hover:text-sky-700">
+                        I AM A VENDOR
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                        Brand Merchant
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Operate an exclusive luxury storefront, manage product catalogs, orders, and receive direct payouts.
+                    </p>
+                  </div>
+                </div>
+                <Icon name="arrow-right" className="w-5 h-5 text-sky-400 group-hover:text-sky-700 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+              </button>
+
+              {/* Warehouse Card (Yellow/Amber theme) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSignupRole('warehouse');
+                  setSignupStep('form');
+                  setError('');
+                  setSuccess('');
+                }}
+                className="w-full text-left p-5 rounded-2xl border-2 border-amber-200 hover:border-amber-500 bg-amber-50/25 hover:bg-amber-50/70 transition-all group flex items-center justify-between shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform shadow-sm">
+                    📦
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="font-serif font-bold text-lg text-amber-950 group-hover:text-amber-800">
+                        I AM A WAREHOUSE
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                        Logistics & Vaults
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Offer secure temperature-controlled storage, bonded vault facilities, and outbound fulfillment.
+                    </p>
+                  </div>
+                </div>
+                <Icon name="arrow-right" className="w-5 h-5 text-amber-500 group-hover:text-amber-800 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
+              </button>
+            </div>
+
+            {/* Switch to Sign In */}
+            <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+              <p className="text-sm text-gray-600">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLogin(true);
+                    setError('');
+                    setSuccess('');
+                  }}
+                  className="font-semibold text-primary hover:underline ml-1 cursor-pointer"
+                >
+                  Sign in instead
+                </button>
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* ── 2. Login or Customized Signup Form ── */
+        <>
+          <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center">
+            <h1 className="text-4xl sm:text-5xl font-serif font-bold text-dark tracking-tight">LuxeLane</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              {isLogin
+                ? 'Sign in to access your luxury shopping experience or merchant portal'
+                : signupRole === 'supplier'
+                ? 'Register your enterprise to supply verified luxury brands on LuxeLane'
+                : signupRole === 'warehouse'
+                ? 'Partner with LuxeLane to provide bonded storage and logistics fulfillment'
+                : signupRole === 'vendor'
+                ? 'Partner with LuxeLane to showcase your luxury brand to exclusive collectors'
+                : 'Create an account and enjoy bespoke luxury shopping'}
+            </p>
+          </div>
+
+          <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-xl">
+            <div className="bg-white py-8 px-6 shadow-xl sm:rounded-2xl sm:px-10 border border-gray-100">
+
+              {/* Customer / Admin tab for login */}
+              {isLogin && (
+                <div className="mb-6">
+                  <div className="border-b border-gray-200">
+                    <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                      <button
+                        onClick={() => setActiveTab('customer')}
+                        className={`${
+                          activeTab === 'customer'
+                            ? 'border-primary text-primary font-semibold'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        } whitespace-nowrap py-3 px-1 border-b-2 text-sm w-1/2 transition-colors`}
+                      >
+                        Customer
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('admin')}
+                        className={`${
+                          activeTab === 'admin'
+                            ? 'border-primary text-primary font-semibold'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        } whitespace-nowrap py-3 px-1 border-b-2 text-sm w-1/2 transition-colors`}
+                      >
+                        Admin Portal
+                      </button>
+                    </nav>
+                  </div>
                 </div>
               )}
 
-              {/* Vendor Specific Business Fields */}
-              {signupRole === 'vendor' && (
-                <div className="space-y-4 pb-2 border-b border-gray-100">
-                  {/* Store Display Name */}
+              {/* Feedback messages */}
+              {error && (
+                <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-start">
+                  <Icon name="x" className="w-5 h-5 mr-2 text-red-500 flex-shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+              {success && (
+                <div className="mb-5 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm flex items-start">
+                  <Icon name="check" className="w-5 h-5 mr-2 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              {/* ── Login Form ─────────────────────────────────────────────────── */}
+              {isLogin ? (
+                <form className="space-y-5" onSubmit={handleLoginSubmit}>
                   <div>
-                    <div className="flex items-center justify-between">
-                      <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
-                        Store / Brand Name <span className="text-red-500">*</span>
-                      </label>
-                      <span className="text-xs text-gray-500">Public store name</span>
-                    </div>
+                    <label htmlFor="login-email" className="block text-sm font-medium text-gray-700">
+                      Email address or Phone
+                    </label>
                     <div className="mt-1">
                       <input
-                        id="display_name"
-                        name="display_name"
+                        id="login-email"
+                        name="email"
                         type="text"
-                        value={signupData.display_name}
-                        onChange={handleSignupChange}
-                        onBlur={() => handleBlur('display_name')}
-                        placeholder="e.g. Aurelia Fine Jewelry"
-                        className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
-                          touched.display_name && errors.display_name
-                            ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
-                            : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
-                        }`}
+                        autoComplete="email"
+                        required
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        placeholder={activeTab === 'admin' ? 'admin@luxelane.com' : 'user@example.com'}
+                        className="appearance-none block w-full px-3.5 py-2.5 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                       />
                     </div>
-                    {touched.display_name && errors.display_name && (
-                      <p className="mt-1 text-xs text-red-600">{errors.display_name}</p>
-                    )}
-                    {signupData.display_name.trim() && (
-                      <p className="mt-1.5 text-xs text-gray-500 flex items-center">
-                        <span className="font-medium text-gray-600 mr-1.5">Storefront URL:</span>
-                        <span className="bg-gray-100 text-primary px-2 py-0.5 rounded font-mono text-[11px]">
-                          luxelane.com/stores/{vendorSlugPreview}
+                  </div>
+
+                  <div>
+                    <label htmlFor="login-password" className="block text-sm font-medium text-gray-700">
+                      Password
+                    </label>
+                    <div className="mt-1 relative">
+                      <input
+                        id="login-password"
+                        name="password"
+                        type={showLoginPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        required
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="appearance-none block w-full px-3.5 py-2.5 pr-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                        tabIndex={-1}
+                      >
+                        <Icon name={showLoginPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <input
+                        id="remember-me"
+                        name="remember-me"
+                        type="checkbox"
+                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                      />
+                      <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                        Remember me
+                      </label>
+                    </div>
+
+                    <div className="text-sm">
+                      <a href="#" className="font-medium text-primary hover:text-primary-hover">
+                        Forgot password?
+                      </a>
+                    </div>
+                  </div>
+
+                  <div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {loading ? 'Signing in...' : 'Sign in'}
+                    </button>
+                  </div>
+
+                  {/* Merchant Apply Link */}
+                  <div className="pt-2 text-center border-t border-gray-100">
+                    <p className="text-xs text-gray-500">
+                      Looking to register as a partner?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLogin(false);
+                          setSignupStep('select-role');
+                          setError('');
+                          setSuccess('');
+                          setTouched({});
+                          setErrors({});
+                        }}
+                        className="font-semibold text-primary hover:underline cursor-pointer"
+                      >
+                        Select a Partner Role →
+                      </button>
+                    </p>
+                  </div>
+                </form>
+              ) : (
+                /* ── Signup Form ────────────────────────────────────────────────── */
+                <form className="space-y-4" onSubmit={handleSignupSubmit} noValidate>
+                  {/* Top Bar with Role Change Option */}
+                  <div className="mb-5 pb-3.5 border-b border-gray-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSignupStep('select-role');
+                        setError('');
+                        setSuccess('');
+                      }}
+                      className="inline-flex items-center text-xs font-semibold text-gray-600 hover:text-dark transition-colors py-1.5 px-3 rounded-lg hover:bg-gray-100 cursor-pointer"
+                    >
+                      <Icon name="arrow-left" className="w-3.5 h-3.5 mr-1.5" />
+                      <span>Change Role</span>
+                    </button>
+
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-400">Role:</span>
+                      <span
+                        className={`text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                          signupRole === 'supplier'
+                            ? 'bg-red-100 text-red-800 border border-red-200'
+                            : signupRole === 'vendor'
+                            ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                            : signupRole === 'warehouse'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                            : 'bg-gray-100 text-gray-800 border border-gray-200'
+                        }`}
+                      >
+                        {signupRole === 'supplier'
+                          ? 'Supplier Partner'
+                          : signupRole === 'vendor'
+                          ? 'Vendor Partner'
+                          : signupRole === 'warehouse'
+                          ? 'Warehouse Logistics'
+                          : 'Personal Shopper'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Role Specific Description Banner */}
+                  {signupRole !== 'customer' && (
+                    <div
+                      className={`p-3.5 border rounded-xl mb-4 text-left ${
+                        signupRole === 'supplier'
+                          ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200/70 text-red-950'
+                          : signupRole === 'vendor'
+                          ? 'bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-200/70 text-sky-950'
+                          : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200/70 text-amber-950'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="flex h-2 w-2 relative">
+                          <span
+                            className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                              signupRole === 'supplier'
+                                ? 'bg-red-400'
+                                : signupRole === 'vendor'
+                                ? 'bg-sky-400'
+                                : 'bg-amber-400'
+                            }`}
+                          ></span>
+                          <span
+                            className={`relative inline-flex rounded-full h-2 w-2 ${
+                              signupRole === 'supplier'
+                                ? 'bg-red-600'
+                                : signupRole === 'vendor'
+                                ? 'bg-sky-600'
+                                : 'bg-amber-600'
+                            }`}
+                          ></span>
                         </span>
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          {signupRole === 'supplier'
+                            ? 'Supplier Partnership Application'
+                            : signupRole === 'vendor'
+                            ? 'Merchant Brand Application'
+                            : 'Logistics & Vault Application'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs opacity-90 leading-relaxed">
+                        {signupRole === 'supplier'
+                          ? 'Register your enterprise to supply fine materials or wholesale collections. Upon verification, your application will be reviewed by procurement.'
+                          : signupRole === 'vendor'
+                          ? 'Register your luxury brand to sell to our exclusive clientele. Upon verification, your store profile will be vetted by our curation board.'
+                          : 'Register your secure storage or fulfillment facility. Upon verification, our logistics board will review your facility credentials.'}
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Legal Entity Name */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <label htmlFor="legal_name" className="block text-sm font-medium text-gray-700">
-                        Legal Entity Name <span className="text-red-500">*</span>
-                      </label>
-                      <span className="text-xs text-gray-500">For contracts & payouts</span>
+                  {/* Business / Brand Fields for Non-Customers */}
+                  {signupRole !== 'customer' && (
+                    <div className="space-y-4 pb-2 border-b border-gray-100">
+                      {/* Brand / Operating Name */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
+                            {signupRole === 'warehouse'
+                              ? 'Warehouse / Facility Name'
+                              : signupRole === 'supplier'
+                              ? 'Supplier / Brand Trade Name'
+                              : 'Store / Brand Name'}{' '}
+                            <span className="text-red-500">*</span>
+                          </label>
+                          <span className="text-xs text-gray-500">Public operating name</span>
+                        </div>
+                        <div className="mt-1">
+                          <input
+                            id="display_name"
+                            name="display_name"
+                            type="text"
+                            value={signupData.display_name}
+                            onChange={handleSignupChange}
+                            onBlur={() => handleBlur('display_name')}
+                            placeholder={
+                              signupRole === 'warehouse'
+                                ? 'e.g. LuxeLane Bonded Vault NYC'
+                                : signupRole === 'supplier'
+                                ? 'e.g. Geneva Precision Horology'
+                                : 'e.g. Aurelia Fine Jewelry'
+                            }
+                            className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                              touched.display_name && errors.display_name
+                                ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
+                                : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                            }`}
+                          />
+                        </div>
+                        {touched.display_name && errors.display_name && (
+                          <p className="mt-1 text-xs text-red-600">{errors.display_name}</p>
+                        )}
+                        {signupRole === 'vendor' && signupData.display_name.trim() && (
+                          <p className="mt-1.5 text-xs text-gray-500 flex items-center">
+                            <span className="font-medium text-gray-600 mr-1.5">Storefront URL:</span>
+                            <span className="bg-gray-100 text-primary px-2 py-0.5 rounded font-mono text-[11px]">
+                              luxelane.com/stores/{vendorSlugPreview}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Legal Entity Name */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <label htmlFor="legal_name" className="block text-sm font-medium text-gray-700">
+                            {signupRole === 'warehouse'
+                              ? 'Operating Company Legal Name'
+                              : signupRole === 'supplier'
+                              ? 'Corporate Legal Entity Name'
+                              : 'Legal Entity Name'}{' '}
+                            <span className="text-red-500">*</span>
+                          </label>
+                          <span className="text-xs text-gray-500">For contracts & payouts</span>
+                        </div>
+                        <div className="mt-1">
+                          <input
+                            id="legal_name"
+                            name="legal_name"
+                            type="text"
+                            value={signupData.legal_name}
+                            onChange={handleSignupChange}
+                            onBlur={() => handleBlur('legal_name')}
+                            placeholder={
+                              signupRole === 'warehouse'
+                                ? 'e.g. Metropolitan Secure Vaults LLC'
+                                : signupRole === 'supplier'
+                                ? 'e.g. Geneva Precision Horology SA'
+                                : 'e.g. Aurelia Luxury Holdings LLC'
+                            }
+                            className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                              touched.legal_name && errors.legal_name
+                                ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
+                                : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                            }`}
+                          />
+                        </div>
+                        {touched.legal_name && errors.legal_name && (
+                          <p className="mt-1 text-xs text-red-600">{errors.legal_name}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-1">
-                      <input
-                        id="legal_name"
-                        name="legal_name"
-                        type="text"
-                        value={signupData.legal_name}
-                        onChange={handleSignupChange}
-                        onBlur={() => handleBlur('legal_name')}
-                        placeholder="e.g. Aurelia Luxury Holdings LLC"
-                        className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
-                          touched.legal_name && errors.legal_name
-                            ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
-                            : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
-                        }`}
-                      />
-                    </div>
-                    {touched.legal_name && errors.legal_name && (
-                      <p className="mt-1 text-xs text-red-600">{errors.legal_name}</p>
-                    )}
-                  </div>
-                </div>
-              )}
+                  )}
 
               {/* Full Name */}
               <div>
@@ -1664,11 +1912,13 @@ const LoginPage: React.FC<LoginPageProps> = ({
                 {isLogin ? 'Create a new account' : 'Sign in instead'}
               </button>
             </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 };
 
 export default LoginPage;
