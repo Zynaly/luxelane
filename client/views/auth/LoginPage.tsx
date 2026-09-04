@@ -39,31 +39,27 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
     setError('');
 
     try {
-      // For admin, use mock login (no backend endpoint for admin login yet)
-      if (activeTab === 'admin') {
-        // Mock admin login
-        if (loginEmail === 'admin@luxelane.com' && loginPassword === 'password') {
-          onLogin('admin');
-        } else {
-          setError('Invalid admin credentials');
-        }
-        setLoading(false);
+      // 1. Try real login against Django backend
+      try {
+        const response = await API.Auth.login({
+          email_or_phone: loginEmail,
+          password: loginPassword,
+        });
+
+        const userRole = (response.user.role && response.user.role.includes('admin')) ? 'admin' : 'customer';
+        setSuccess(`Welcome back, ${response.user.first_name || 'User'}!`);
+        setTimeout(() => {
+          onLogin(userRole);
+        }, 400);
         return;
+      } catch (apiErr: any) {
+        // If in admin tab and demo credentials match, fallback to mock demo
+        if (activeTab === 'admin' && loginEmail === 'admin@luxelane.com' && loginPassword === 'password') {
+          onLogin('admin');
+          return;
+        }
+        throw apiErr;
       }
-
-      // For customer, use real API
-      const response = await API.Auth.login({
-        email: loginEmail,
-        password: loginPassword
-      });
-
-      console.log('Login successful:', response);
-      setSuccess('Login successful!');
-
-      // Call onLogin to update app state
-      setTimeout(() => {
-        onLogin('customer');
-      }, 500);
 
     } catch (err: any) {
       console.error('Login error:', err);

@@ -105,7 +105,7 @@
 - [x] **S2-T10** Complete `AuditLogMiddleware` — hooks on admin-role mutating requests
 - [x] **S2-T11** Wire all Sprint 2 URLs
 
-**S2 Status: ✅ Complete** — 20 total unit tests passing · OpenAPI schema 0 errors · Migrations applied
+**S2 Status: ✅ Complete** — 20 total unit tests passing · OpenAPI schema 0 errors · Migrations applied · Frontend integration complete (Auth, Session, Account Portal, Addresses, Avatar upload, Notifications, Customer Management)
 
 ---
 

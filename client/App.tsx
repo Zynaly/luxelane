@@ -6,6 +6,7 @@ import ShopPage from './views/customer/pages/ShopPage';
 import AboutUsPage from './views/customer/pages/AboutUsPage';
 import ContactPage from './views/customer/pages/ContactPage';
 import LoginPage from './views/auth/LoginPage';
+import AccountPage from './views/customer/pages/AccountPage';
 
 import AdminDashboard from './views/admin/AdminDashboard';
 import ProductManagementPage from './views/admin/pages/ProductManagementPage';
@@ -15,10 +16,10 @@ import WarehouseManagementPage from './views/admin/pages/WarehouseManagementPage
 
 import { User } from './types';
 import { mockUser, mockAdminUser } from './data/mockData';
+import API, { TokenService } from './services/api';
 
 // Placeholder Customer Pages for routes not fully built out
 const CartPagePlaceholder: React.FC = () => <div className="p-8 text-center text-2xl font-serif">Shopping Cart Page</div>;
-const AccountPagePlaceholder: React.FC = () => <div className="p-8 text-center text-2xl font-serif">User Account Page</div>;
 
 type CustomerPage = 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account';
 type AdminPage = 'dashboard' | 'products' | 'orders' | 'customers' | 'warehouse';
@@ -209,7 +210,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       case 'about': return <AboutUsPage />;
       case 'contact': return <ContactPage onOpenChat={() => setIsChatOpen(true)} />;
       case 'cart': return <CartPagePlaceholder />;
-      case 'account': return <AccountPagePlaceholder />;
+      case 'account': return <AccountPage onLogout={onLogout} />;
       default: return <HomePage onNavigate={setPage} />;
     }
   };
@@ -252,16 +253,53 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>('landing');
 
+  // Check saved session on mount
+  useEffect(() => {
+    const token = TokenService.getToken();
+    const savedUser = TokenService.getUser();
+    if (token && savedUser) {
+      const role = (savedUser.role && savedUser.role.includes('admin')) ? 'admin' : 'customer';
+      setUser({
+        id: 1,
+        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : 'Customer'),
+        email: savedUser.email || '',
+        role: role,
+        profilePictureUrl: savedUser.avatar_url || (role === 'admin' ? mockAdminUser.profilePictureUrl : mockUser.profilePictureUrl),
+        addresses: [],
+        paymentMethods: [],
+      });
+      setView('authenticated');
+    }
+  }, []);
+
   const handleGetStarted = () => {
     setView('auth');
   };
 
   const handleLogin = (role: 'customer' | 'admin') => {
-    setUser(role === 'admin' ? mockAdminUser : mockUser);
+    const savedUser = TokenService.getUser();
+    if (savedUser) {
+      setUser({
+        id: 1,
+        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : 'Customer'),
+        email: savedUser.email || (role === 'admin' ? 'admin@luxelane.com' : 'user@luxelane.com'),
+        role: role,
+        profilePictureUrl: savedUser.avatar_url || (role === 'admin' ? mockAdminUser.profilePictureUrl : mockUser.profilePictureUrl),
+        addresses: [],
+        paymentMethods: [],
+      });
+    } else {
+      setUser(role === 'admin' ? mockAdminUser : mockUser);
+    }
     setView('authenticated');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await API.Auth.logout();
+    } catch {
+      TokenService.removeTokens();
+    }
     setUser(null);
     setView('landing');
   };
