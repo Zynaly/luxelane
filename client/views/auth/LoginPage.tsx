@@ -878,7 +878,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
 
           <div className="mt-8 bg-white py-8 px-6 shadow-xl sm:rounded-3xl sm:px-8 border border-gray-100 text-left">
             <div className="space-y-4">
-              {/* Shopper / Customer */}
+              {/* Customer */}
               <button
                 type="button"
                 onClick={() => {
@@ -896,10 +896,10 @@ const LoginPage: React.FC<LoginPageProps> = ({
                   <div>
                     <div className="flex items-center space-x-2">
                       <span className="font-serif font-bold text-lg text-dark group-hover:text-primary">
-                        I AM A SHOPPER
+                        I AM A CUSTOMER
                       </span>
                       <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700">
-                        Personal Client
+                        Customer
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
@@ -1228,7 +1228,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
                           ? 'Vendor Partner'
                           : signupRole === 'warehouse'
                           ? 'Warehouse Logistics'
-                          : 'Personal Shopper'}
+                          : 'Customer'}
                       </span>
                     </div>
                   </div>
