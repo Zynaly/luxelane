@@ -806,6 +806,66 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                 )}
               </div>
 
+              {/* Street Address with Real-Time Address Autocomplete API */}
+              <div className="relative" ref={addressRef}>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                    Street Address <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-gray-400">
+                    {isLoadingAddress ? 'Searching address...' : 'Type for verified address lookup'}
+                  </span>
+                </div>
+                <div className="mt-1 relative">
+                  <input
+                    id="address"
+                    name="address"
+                    type="text"
+                    value={signupData.address}
+                    onChange={handleAddressInputChange}
+                    onFocus={() => {
+                      if (signupData.address.trim().length >= 3 && addressSuggestions.length > 0) {
+                        setIsAddressOpen(true);
+                      }
+                    }}
+                    onBlur={() => handleBlur('address')}
+                    placeholder="e.g. 123 Main Street, Suite 100"
+                    className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                      touched.address && errors.address
+                        ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
+                        : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                    }`}
+                  />
+                  {isLoadingAddress && (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Verified Address Autocomplete Suggestions Dropdown */}
+                {isAddressOpen && addressSuggestions.length > 0 && (
+                  <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl max-h-60 rounded-xl py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-gray-100 divide-y divide-gray-50">
+                    <div className="px-3 py-1.5 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Verified Address Matches (Click to auto-fill)
+                    </div>
+                    {addressSuggestions.map((s, idx) => (
+                      <div
+                        key={idx}
+                        onMouseDown={() => handleSelectAddressSuggestion(s)}
+                        className="cursor-pointer select-none py-2.5 px-3.5 hover:bg-gray-50 flex flex-col transition-colors"
+                      >
+                        <span className="font-semibold text-gray-900 text-sm">{s.street}</span>
+                        <span className="text-xs text-gray-500 truncate">{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {touched.address && errors.address && (
+                  <p className="mt-1 text-xs text-red-600">{errors.address}</p>
+                )}
+              </div>
+
               {/* Phone Number with Strict Country Code Length Limit */}
               <div>
                 <div className="flex items-center justify-between">
@@ -1098,66 +1158,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                     <p className="mt-1 text-xs text-red-600">{errors.zip_code}</p>
                   )}
                 </div>
-              </div>
-
-              {/* Street Address with Real-Time Address Autocomplete API */}
-              <div className="relative" ref={addressRef}>
-                <div className="flex items-center justify-between">
-                  <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                    Street Address <span className="text-red-500">*</span>
-                  </label>
-                  <span className="text-[11px] text-gray-400">
-                    {isLoadingAddress ? 'Searching address...' : 'Type for verified address lookup'}
-                  </span>
-                </div>
-                <div className="mt-1 relative">
-                  <input
-                    id="address"
-                    name="address"
-                    type="text"
-                    value={signupData.address}
-                    onChange={handleAddressInputChange}
-                    onFocus={() => {
-                      if (signupData.address.trim().length >= 3 && addressSuggestions.length > 0) {
-                        setIsAddressOpen(true);
-                      }
-                    }}
-                    onBlur={() => handleBlur('address')}
-                    placeholder="e.g. 123 Main Street, Suite 100"
-                    className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
-                      touched.address && errors.address
-                        ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
-                        : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
-                    }`}
-                  />
-                  {isLoadingAddress && (
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Verified Address Autocomplete Suggestions Dropdown */}
-                {isAddressOpen && addressSuggestions.length > 0 && (
-                  <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl max-h-60 rounded-xl py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-gray-100 divide-y divide-gray-50">
-                    <div className="px-3 py-1.5 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                      Verified Address Matches (Click to auto-fill)
-                    </div>
-                    {addressSuggestions.map((s, idx) => (
-                      <div
-                        key={idx}
-                        onMouseDown={() => handleSelectAddressSuggestion(s)}
-                        className="cursor-pointer select-none py-2.5 px-3.5 hover:bg-gray-50 flex flex-col transition-colors"
-                      >
-                        <span className="font-semibold text-gray-900 text-sm">{s.street}</span>
-                        <span className="text-xs text-gray-500 truncate">{s.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {touched.address && errors.address && (
-                  <p className="mt-1 text-xs text-red-600">{errors.address}</p>
-                )}
               </div>
 
               {/* Submit Button */}
