@@ -12,8 +12,8 @@
 | Sprint | Name | Endpoints | Status | Progress |
 |--------|------|-----------|--------|----------|
 | 0 | Foundations | 4 | ✅ Complete | ██████████ 100% |
-| 1 | Identity & RBAC | 15 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 2 | Profiles, Addresses, Media, Audit, Notifications | 7 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 1 | Identity & RBAC | 15 | ✅ Complete | ██████████ 100% |
+| 2 | Profiles, Addresses, Media, Audit, Notifications | 7 | ✅ Complete | ██████████ 100% |
 | 3 | Vendors, KYC, Staff, Commission | 14 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 4 | Catalog Core & Moderation | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 5 | Variants, Attributes & Search | 9 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -93,19 +93,19 @@
 
 ### Tasks
 
-- [ ] **S2-T1** `Address` model — lat/lng, type, is_default, contact_phone
-- [ ] **S2-T2** `AuditLog` model — append-only, actor, action, before/after JSON diff, ip_address
-- [ ] **S2-T3** `Notification`, `NotificationTemplate`, `NotificationPreference` models
-- [ ] **S2-T4** Migrations
-- [ ] **S2-T5** `AddressViewSet (ModelViewSet)` — owner-scoped CRUD
-- [ ] **S2-T6** `AddressValidateView` — geocoding adapter stub (normalize + lat/lng)
-- [ ] **S2-T7** `MediaPresignedUploadView` — S3/MinIO presigned PUT stub
-- [ ] **S2-T8** `NotificationViewSet` — list + `mark_read` action
-- [ ] **S2-T9** `NotificationPreferenceViewSet` — list + update
-- [ ] **S2-T10** Complete `AuditLogMiddleware` — hooks on admin-role mutating requests
-- [ ] **S2-T11** Wire all Sprint 2 URLs
+- [x] **S2-T1** `Address` model — lat/lng, type, is_default, contact_phone
+- [x] **S2-T2** `AuditLog` model — append-only, actor, action, before/after JSON diff, ip_address
+- [x] **S2-T3** `Notification`, `NotificationTemplate`, `NotificationPreference` models
+- [x] **S2-T4** Migrations
+- [x] **S2-T5** `AddressViewSet (ModelViewSet)` — owner-scoped CRUD
+- [x] **S2-T6** `AddressValidateView` — geocoding adapter stub (normalize + lat/lng)
+- [x] **S2-T7** `MediaPresignedUploadView` — S3/MinIO presigned PUT stub
+- [x] **S2-T8** `NotificationViewSet` — list + `mark_read` action
+- [x] **S2-T9** `NotificationPreferenceViewSet` — list + update
+- [x] **S2-T10** Complete `AuditLogMiddleware` — hooks on admin-role mutating requests
+- [x] **S2-T11** Wire all Sprint 2 URLs
 
-**S2 Status: ⏳ Pending**
+**S2 Status: ✅ Complete** — 20 total unit tests passing · OpenAPI schema 0 errors · Migrations applied
 
 ---
 

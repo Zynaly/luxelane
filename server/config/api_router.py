@@ -12,10 +12,10 @@ urlpatterns = [
     path("users/", include("accounts.urls.users")),
     path("admin/", include("accounts.urls.admin")),
 
-    # Sprint 2 — Addresses / Notifications
-    # path("addresses/", include("accounts.urls.addresses")),
-    # path("notifications/", include("notifications.urls")),
-    # path("media/", include("core.urls.media")),
+    # Sprint 2 — Addresses / Notifications / Media
+    path("addresses/", include("accounts.urls.addresses")),
+    path("notifications/", include("notifications.urls")),
+    path("media/", include("core.urls.media")),
 
     # Sprint 3 — Vendors
     # path("vendors/", include("vendors.urls")),

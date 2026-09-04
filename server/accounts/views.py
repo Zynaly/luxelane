@@ -392,3 +392,48 @@ class AdminUserStatusUpdateView(APIView):
         )
 
         return Response(AdminUserSerializer(user).data, status=status.HTTP_200_OK)
+
+
+# ── Addresses (Sprint 2) ──────────────────────────────────────────────────────
+from rest_framework import viewsets
+from core.permissions import IsObjectOwner
+from accounts.models import Address
+from accounts.serializers import AddressSerializer, AddressValidateSerializer
+
+
+@extend_schema(tags=["Addresses"])
+class AddressViewSet(viewsets.ModelViewSet):
+    """
+    User addresses CRUD.
+    Scoped strictly to the authenticated user (owner-scoped).
+    Supports GET, POST, PUT, PATCH, DELETE.
+    """
+    permission_classes = [IsAuthenticated, IsObjectOwner]
+    serializer_class   = AddressSerializer
+    queryset           = Address.objects.none()
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False) or not self.request.user.is_authenticated:
+            return Address.objects.none()
+        return Address.objects.filter(user=self.request.user, is_deleted=False).order_by("-is_default", "-created_at")
+
+    def perform_destroy(self, instance):
+        # Soft-delete address per spec
+        instance.is_deleted = True
+        instance.save(update_fields=["is_deleted"])
+
+
+@extend_schema(
+    tags=["Addresses"],
+    request=AddressValidateSerializer,
+    responses={200: AddressValidateSerializer},
+)
+class AddressValidateView(APIView):
+    """POST /addresses/validate/ — validate and normalize address with geocoding."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = AddressValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+

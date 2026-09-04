@@ -40,6 +40,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "core",
     "accounts",
+    "notifications",
     # Added sprint-by-sprint:
     # "vendors",
     # "catalog",
@@ -48,7 +49,6 @@ LOCAL_APPS = [
     # "orders",
     # "payments",
     # "shipping",
-    # "notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -180,6 +180,10 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
     "SORT_OPERATIONS": False,
     "ENUM_GENERATE_CHOICE_DESCRIPTION": True,
+    "ENUM_NAME_OVERRIDES": {
+        "OTPPurposeEnum": "accounts.models.OTPPurpose",
+        "PresignedUploadPurposeEnum": "core.serializers.PresignedUploadPurpose",
+    },
     "CONTACT": {"name": "LuxeLane Engineering"},
 }
 

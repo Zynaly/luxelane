@@ -233,3 +233,72 @@ class AdminUserStatusUpdateSerializer(serializers.Serializer):
     """PATCH /admin/users/{id}/status/ — suspend or reactivate a user."""
     is_active = serializers.BooleanField()
     reason    = serializers.CharField(required=False, allow_blank=True)
+
+
+# ── Address Serializers (Sprint 2) ───────────────────────────────────────────
+from accounts.models import Address, AddressType
+from core.services.geocoding import GeocodingAdapter
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    """
+    Owner-scoped CRUD address serializer.
+    Automatically ensures only one default address exists per (user, type).
+    """
+    class Meta:
+        model = Address
+        fields = [
+            "id", "label", "line1", "line2", "city", "state", "country", "postal_code",
+            "latitude", "longitude", "type", "is_default", "contact_phone",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+        is_default = validated_data.get("is_default", False)
+        addr_type = validated_data.get("type", AddressType.BOTH)
+
+        from django.db import transaction
+        with transaction.atomic():
+            if is_default:
+                # Unset previous default of compatible type
+                types_to_clear = [addr_type, AddressType.BOTH] if addr_type != AddressType.BOTH else [AddressType.SHIPPING, AddressType.BILLING, AddressType.BOTH]
+                Address.objects.filter(user=user, type__in=types_to_clear, is_default=True).update(is_default=False)
+
+            # Auto-geocode if coordinates not passed explicitly
+            if not validated_data.get("latitude") or not validated_data.get("longitude"):
+                geo = GeocodingAdapter.validate_and_normalize(validated_data)
+                validated_data["latitude"] = geo.get("latitude")
+                validated_data["longitude"] = geo.get("longitude")
+
+            address = Address.objects.create(user=user, **validated_data)
+        return address
+
+    def update(self, instance, validated_data):
+        user = self.context["request"].user
+        is_default = validated_data.get("is_default", instance.is_default)
+        addr_type = validated_data.get("type", instance.type)
+
+        from django.db import transaction
+        with transaction.atomic():
+            if is_default and not instance.is_default:
+                types_to_clear = [addr_type, AddressType.BOTH] if addr_type != AddressType.BOTH else [AddressType.SHIPPING, AddressType.BILLING, AddressType.BOTH]
+                Address.objects.filter(user=user, type__in=types_to_clear, is_default=True).exclude(id=instance.id).update(is_default=False)
+
+            return super().update(instance, validated_data)
+
+
+class AddressValidateSerializer(serializers.Serializer):
+    """Input raw address components, returns normalized components + lat/lng."""
+    line1       = serializers.CharField(max_length=255)
+    line2       = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    city        = serializers.CharField(max_length=100)
+    state       = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    country     = serializers.CharField(max_length=100, default="US")
+    postal_code = serializers.CharField(max_length=20)
+
+    def validate(self, data):
+        normalized = GeocodingAdapter.validate_and_normalize(data)
+        return normalized
+

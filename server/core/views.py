@@ -74,3 +74,34 @@ class ReadinessCheckView(APIView):
 
         status_code = 200 if healthy else 503
         return Response({"status": "ok" if healthy else "degraded", "checks": checks}, status=status_code)
+
+
+from rest_framework.permissions import IsAuthenticated
+from core.serializers import PresignedUploadRequestSerializer, PresignedUploadResponseSerializer
+from core.services.media import generate_presigned_upload
+
+
+class MediaPresignedUploadView(APIView):
+    """
+    POST /api/v1/media/presigned-upload/ — request a presigned upload URL for media.
+    Allowed purposes: avatar, vendor_document, product_image, review_media.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Media"],
+        request=PresignedUploadRequestSerializer,
+        responses={200: PresignedUploadResponseSerializer},
+    )
+    def post(self, request):
+        serializer = PresignedUploadRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+        result = generate_presigned_upload(
+            purpose=d["purpose"],
+            content_type=d["content_type"],
+            size_bytes=d["size_bytes"],
+            filename=d.get("filename"),
+        )
+        return Response(result)
+

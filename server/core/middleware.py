@@ -67,13 +67,32 @@ class AuditLogMiddleware:
         """Write an AuditLog row. Silently swallows errors to never break requests."""
         try:
             from core.models import AuditLog  # noqa: PLC0415 — deferred import
+            import json
+
+            # Extract target info from URL resolver kwargs if present
+            target_model = ""
+            target_id = None
+            match = getattr(request, "resolver_match", None)
+            if match and match.kwargs:
+                target_id = match.kwargs.get("pk") or match.kwargs.get("id")
+                target_model = match.url_name or ""
+
+            # Sanitize payload to avoid writing passwords or tokens to audit logs
+            after_payload = {"status_code": response.status_code}
+            if hasattr(request, "data") and isinstance(request.data, dict):
+                safe_data = {
+                    k: ("***" if "password" in k.lower() or "token" in k.lower() else v)
+                    for k, v in request.data.items()
+                }
+                after_payload["request_data"] = safe_data
+
             AuditLog.objects.create(
                 actor=request.user,
                 action=f"{request.method}:{request.path}",
-                target_model="",
-                target_id=None,
+                target_model=str(target_model)[:100],
+                target_id=target_id if target_id else None,
                 before=None,
-                after=None,
+                after=after_payload,
                 ip_address=self._get_ip(request),
             )
         except Exception:
@@ -85,3 +104,4 @@ class AuditLogMiddleware:
         if xff:
             return xff.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "")
+
