@@ -27,6 +27,8 @@ interface LoginPageProps {
   initialRole?: 'customer' | 'vendor';
 }
 
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
+
 const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onBackToLanding,
@@ -41,8 +43,27 @@ const LoginPage: React.FC<LoginPageProps> = ({
     initialMode === 'signup' && initialRole ? 'form' : 'select-role'
   );
 
-  // Form Fields
+  // Form Fields & State
   const [activeTab, setActiveTab] = useState<'customer' | 'admin'>('customer');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // OTP Verification Modal state
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpDestination, setOtpDestination] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpSuccess, setOtpSuccess] = useState('');
+  const [otpError, setOtpError] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Floating Toast Notification state
+  const [toast, setToast] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
+
+  // Password visibility toggle
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');

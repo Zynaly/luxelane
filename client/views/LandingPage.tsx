@@ -52,7 +52,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
-                  onClick={onGetStarted}
+                  onClick={() => onGetStarted({ mode: 'signup' })}
                   className="bg-accent text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-accent-hover transition-all transform hover:scale-105 shadow-lg"
                 >
                   Get Started

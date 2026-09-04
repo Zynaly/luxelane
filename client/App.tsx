@@ -356,10 +356,10 @@ const App: React.FC = () => {
   }, []);
 
   const handleGetStarted = (options?: { mode?: 'login' | 'signup'; role?: 'customer' | 'vendor' }) => {
-    if (options) {
+    if (options && typeof options === 'object' && 'mode' in options && options.mode) {
       setAuthOptions(options);
     } else {
-      setAuthOptions({ mode: 'login', role: 'customer' });
+      setAuthOptions({ mode: 'signup', role: undefined });
     }
     setView('auth');
   };
