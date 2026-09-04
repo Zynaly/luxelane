@@ -19,14 +19,22 @@ import {
 } from '../../services/addressLookupService';
 
 interface LoginPageProps {
-  onLogin: (role: 'customer' | 'admin') => void;
+  onLogin: (role: 'customer' | 'admin' | 'vendor') => void;
   onBackToLanding?: () => void;
+  initialMode?: 'login' | 'signup';
+  initialRole?: 'customer' | 'vendor';
 }
 
 const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
-  const [isLogin, setIsLogin] = useState(true);
+const LoginPage: React.FC<LoginPageProps> = ({
+  onLogin,
+  onBackToLanding,
+  initialMode = 'login',
+  initialRole = 'customer',
+}) => {
+  const [isLogin, setIsLogin] = useState(initialMode !== 'signup');
+  const [signupRole, setSignupRole] = useState<'customer' | 'vendor'>(initialRole);
   const [activeTab, setActiveTab] = useState<'customer' | 'admin'>('customer');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,8 +60,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
     state_code: 'CA',
     city: 'San Francisco',
     zip_code: '94102',
-    address: ''
+    address: '',
+    legal_name: '',
+    display_name: '',
   });
+
+  // Vendor slug preview for store URL
+  const vendorSlugPreview = signupData.display_name
+    ? signupData.display_name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    : 'your-brand';
 
   // Form validation errors and touched state
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -196,6 +214,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
         if (!value.trim()) return 'Street address is required';
         if (value.trim().length < 5) return 'Street address must be at least 5 characters';
         return '';
+      case 'legal_name':
+        if (signupRole === 'vendor') {
+          if (!value.trim()) return 'Legal business entity name is required';
+          if (value.trim().length < 2) return 'Legal entity name must be at least 2 characters';
+        }
+        return '';
+      case 'display_name':
+        if (signupRole === 'vendor') {
+          if (!value.trim()) return 'Store / Brand display name is required';
+          if (value.trim().length < 2) return 'Store display name must be at least 2 characters';
+        }
+        return '';
       default:
         return '';
     }
@@ -207,6 +237,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
     const allTouched: Record<string, boolean> = {};
 
     Object.entries(signupData).forEach(([field, value]) => {
+      // Skip vendor-only fields when registering as a regular customer
+      if (signupRole === 'customer' && (field === 'legal_name' || field === 'display_name')) {
+        return;
+      }
       allTouched[field] = true;
       const err = validateField(field, value);
       if (err) newErrors[field] = err;
@@ -445,7 +479,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
           password: loginPassword,
         });
 
-        const userRole = (response.user.role && response.user.role.includes('admin')) ? 'admin' : 'customer';
+        const role = response.user.role;
+        let userRole: 'customer' | 'admin' | 'vendor' = 'customer';
+        if (role && (role === 'vendor_owner' || role === 'vendor_staff')) {
+          userRole = 'vendor';
+        } else if (role && role.includes('admin')) {
+          userRole = 'admin';
+        }
         setSuccess(`Welcome back, ${response.user.first_name || 'User'}!`);
         setTimeout(() => {
           onLogin(userRole);
@@ -481,30 +521,45 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
 
     setLoading(true);
     try {
-      const response = await API.Auth.signup(signupData);
-      console.log('Signup successful:', response);
-
-      // Store address locally so it can be added to the customer profile upon login
-      try {
-        localStorage.setItem(
-          'pending_registration_address',
-          JSON.stringify({
-            line1: signupData.address,
-            city: signupData.city,
-            state: signupData.state,
-            postal_code: signupData.zip_code,
-            country: signupData.country_code || signupData.country,
-            contact_phone: signupData.phone_number,
-            label: 'Home',
-            type: 'both',
-            is_default: true,
-          })
+      if (signupRole === 'vendor') {
+        const response = await API.Auth.signupVendor({
+          name: signupData.name,
+          email: signupData.email,
+          password: signupData.password,
+          phone_number: signupData.phone_number,
+          legal_name: signupData.legal_name,
+          display_name: signupData.display_name,
+        });
+        console.log('Vendor application successful:', response);
+        setSuccess(
+          'Vendor application submitted successfully! Please check your email or phone for verification OTP. Your merchant account is now pending platform review.'
         );
-      } catch {
-        // ignore storage error
-      }
+      } else {
+        const response = await API.Auth.signup(signupData);
+        console.log('Signup successful:', response);
 
-      setSuccess('Account created successfully! Please check your email or phone for verification OTP.');
+        // Store address locally so it can be added to the customer profile upon login
+        try {
+          localStorage.setItem(
+            'pending_registration_address',
+            JSON.stringify({
+              line1: signupData.address,
+              city: signupData.city,
+              state: signupData.state,
+              postal_code: signupData.zip_code,
+              country: signupData.country_code || signupData.country,
+              contact_phone: signupData.phone_number,
+              label: 'Home',
+              type: 'both',
+              is_default: true,
+            })
+          );
+        } catch {
+          // ignore storage error
+        }
+
+        setSuccess('Account created successfully! Please check your email or phone for verification OTP.');
+      }
 
       // Switch to login tab after 2.5 seconds
       setTimeout(() => {
@@ -542,7 +597,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
       <div className="sm:mx-auto sm:w-full sm:max-w-xl text-center">
         <h1 className="text-4xl sm:text-5xl font-serif font-bold text-dark tracking-tight">LuxeLane</h1>
         <p className="mt-2 text-sm text-gray-600">
-          {isLogin ? 'Sign in to access your luxury shopping experience' : 'Create an account and enjoy bespoke luxury shopping'}
+          {isLogin
+            ? 'Sign in to access your luxury shopping experience or merchant portal'
+            : signupRole === 'vendor'
+            ? 'Partner with LuxeLane to showcase your luxury brand to exclusive collectors'
+            : 'Create an account and enjoy bespoke luxury shopping'}
         </p>
       </div>
 
@@ -671,14 +730,158 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                   {loading ? 'Signing in...' : 'Sign in'}
                 </button>
               </div>
+
+              {/* Merchant Apply Link */}
+              <div className="pt-2 text-center border-t border-gray-100">
+                <p className="text-xs text-gray-500">
+                  Are you a luxury brand or merchant?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLogin(false);
+                      setSignupRole('vendor');
+                      setError('');
+                      setSuccess('');
+                      setTouched({});
+                      setErrors({});
+                    }}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    Apply as a Vendor Partner →
+                  </button>
+                </p>
+              </div>
             </form>
           ) : (
             /* ── Signup Form ────────────────────────────────────────────────── */
             <form className="space-y-4" onSubmit={handleSignupSubmit} noValidate>
+              {/* Account Type Selector (Customer vs Vendor Partner) */}
+              <div className="p-1 bg-gray-100 rounded-xl flex items-center mb-5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSignupRole('customer');
+                    setErrors({});
+                  }}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    signupRole === 'customer'
+                      ? 'bg-white text-dark shadow-sm font-semibold'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  <Icon name="user" className="w-4 h-4" />
+                  <span>Personal Shopper</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSignupRole('vendor');
+                    setErrors({});
+                  }}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    signupRole === 'vendor'
+                      ? 'bg-primary text-white shadow-sm font-semibold'
+                      : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                >
+                  <Icon name="cart" className="w-4 h-4" />
+                  <span>Vendor Partner (Seller)</span>
+                </button>
+              </div>
+
+              {signupRole === 'vendor' && (
+                <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/70 rounded-xl mb-4 text-left">
+                  <div className="flex items-center space-x-2">
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    </span>
+                    <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                      LuxeLane Merchant Application
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+                    Join our curated luxury marketplace. Complete your business details below. Upon email verification, our merchant curation team will review your application for platform approval.
+                  </p>
+                </div>
+              )}
+
+              {/* Vendor Specific Business Fields */}
+              {signupRole === 'vendor' && (
+                <div className="space-y-4 pb-2 border-b border-gray-100">
+                  {/* Store Display Name */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
+                        Store / Brand Name <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-xs text-gray-500">Public store name</span>
+                    </div>
+                    <div className="mt-1">
+                      <input
+                        id="display_name"
+                        name="display_name"
+                        type="text"
+                        value={signupData.display_name}
+                        onChange={handleSignupChange}
+                        onBlur={() => handleBlur('display_name')}
+                        placeholder="e.g. Aurelia Fine Jewelry"
+                        className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                          touched.display_name && errors.display_name
+                            ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
+                            : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                        }`}
+                      />
+                    </div>
+                    {touched.display_name && errors.display_name && (
+                      <p className="mt-1 text-xs text-red-600">{errors.display_name}</p>
+                    )}
+                    {signupData.display_name.trim() && (
+                      <p className="mt-1.5 text-xs text-gray-500 flex items-center">
+                        <span className="font-medium text-gray-600 mr-1.5">Storefront URL:</span>
+                        <span className="bg-gray-100 text-primary px-2 py-0.5 rounded font-mono text-[11px]">
+                          luxelane.com/stores/{vendorSlugPreview}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Legal Entity Name */}
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="legal_name" className="block text-sm font-medium text-gray-700">
+                        Legal Entity Name <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-xs text-gray-500">For contracts & payouts</span>
+                    </div>
+                    <div className="mt-1">
+                      <input
+                        id="legal_name"
+                        name="legal_name"
+                        type="text"
+                        value={signupData.legal_name}
+                        onChange={handleSignupChange}
+                        onBlur={() => handleBlur('legal_name')}
+                        placeholder="e.g. Aurelia Luxury Holdings LLC"
+                        className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                          touched.legal_name && errors.legal_name
+                            ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
+                            : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
+                        }`}
+                      />
+                    </div>
+                    {touched.legal_name && errors.legal_name && (
+                      <p className="mt-1 text-xs text-red-600">{errors.legal_name}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Full Name */}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  Full Name <span className="text-red-500">*</span>
+                  {signupRole === 'vendor' ? 'Representative / Owner Full Name' : 'Full Name'}{' '}
+                  <span className="text-red-500">*</span>
                 </label>
                 <div className="mt-1">
                   <input
@@ -704,7 +907,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
               {/* Email */}
               <div>
                 <label htmlFor="signup-email" className="block text-sm font-medium text-gray-700">
-                  Email <span className="text-red-500">*</span>
+                  {signupRole === 'vendor' ? 'Business Contact Email' : 'Email'}{' '}
+                  <span className="text-red-500">*</span>
                 </label>
                 <div className="mt-1">
                   <input
@@ -810,7 +1014,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
               <div className="relative" ref={addressRef}>
                 <div className="flex items-center justify-between">
                   <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                    Street Address <span className="text-red-500">*</span>
+                    {signupRole === 'vendor' ? 'Business Registered Address' : 'Street Address'}{' '}
+                    <span className="text-red-500">*</span>
                   </label>
                   <span className="text-[11px] text-gray-400">
                     {isLoadingAddress ? 'Searching address...' : 'Type for verified address lookup'}
@@ -870,7 +1075,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
               <div>
                 <div className="flex items-center justify-between">
                   <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700">
-                    Phone Number <span className="text-red-500">*</span>
+                    {signupRole === 'vendor' ? 'Business Contact Phone' : 'Phone Number'}{' '}
+                    <span className="text-red-500">*</span>
                   </label>
                   <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                     {signupData.phone_number.length} / {activePhoneInfo.max_length} max
@@ -1167,7 +1373,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                   disabled={loading}
                   className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-semibold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-[0.99]"
                 >
-                  {loading ? 'Creating account...' : 'Create Account'}
+                  {loading
+                    ? signupRole === 'vendor'
+                      ? 'Submitting Application...'
+                      : 'Creating account...'
+                    : signupRole === 'vendor'
+                    ? 'Submit Vendor Application'
+                    : 'Create Account'}
                 </button>
               </div>
             </form>

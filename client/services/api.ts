@@ -96,6 +96,32 @@ export const AuthAPI = {
     });
   },
 
+  signupVendor: async (data: {
+    name: string;
+    email: string;
+    password: string;
+    phone_number?: string;
+    legal_name: string;
+    display_name: string;
+  }) => {
+    const nameParts = (data.name || '').trim().split(' ');
+    const first_name = nameParts[0] || 'Vendor';
+    const last_name = nameParts.slice(1).join(' ') || 'Owner';
+
+    return apiRequest<{ detail: string }>('/auth/register/vendor/', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: data.email,
+        phone: data.phone_number || undefined,
+        password: data.password,
+        first_name,
+        last_name,
+        legal_name: data.legal_name,
+        display_name: data.display_name,
+      }),
+    });
+  },
+
   login: async (credentials: { email_or_phone: string; password: string }) => {
     const res = await apiRequest<{
       access: string;

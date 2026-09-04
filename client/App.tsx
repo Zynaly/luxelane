@@ -247,21 +247,104 @@ const AdminView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   );
 };
 
+const VendorPortalPlaceholder: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
+        <div className="flex items-center space-x-3">
+          <span className="text-2xl font-serif font-bold text-dark">LuxeLane</span>
+          <span className="bg-amber-100 text-amber-900 text-xs font-semibold px-2.5 py-1 rounded-full uppercase tracking-wider">
+            Vendor Merchant Portal
+          </span>
+        </div>
+        <div className="flex items-center space-x-4">
+          <div className="text-right hidden sm:block">
+            <p className="text-sm font-semibold text-gray-900">{user.name}</p>
+            <p className="text-xs text-gray-500">{user.email}</p>
+          </div>
+          <button
+            onClick={onLogout}
+            className="flex items-center space-x-1 px-3.5 py-2 text-sm text-gray-700 hover:text-dark hover:bg-gray-100 rounded-lg transition-colors border border-gray-200"
+          >
+            <Icon name="logout" className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 flex-1 flex flex-col justify-center">
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 sm:p-12 text-center">
+          <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <Icon name="cart" className="w-8 h-8" />
+          </div>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 mb-4">
+            Application Status: Pending Review
+          </span>
+          <h2 className="text-3xl font-serif font-bold text-dark mb-3">
+            Welcome to the LuxeLane Partner Network
+          </h2>
+          <p className="text-gray-600 max-w-xl mx-auto mb-8 text-base leading-relaxed">
+            Thank you for registering your luxury brand, <strong className="text-dark font-semibold">{user.name}</strong>. Your vendor application and merchant credentials have been submitted to our platform curation committee.
+          </p>
+
+          <div className="grid sm:grid-cols-3 gap-4 text-left mb-8 max-w-2xl mx-auto">
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Step 1</span>
+              <span className="text-sm font-semibold text-emerald-600 flex items-center">
+                ✓ Account Created
+              </span>
+            </div>
+            <div className="p-4 bg-amber-50/70 rounded-xl border border-amber-200/50">
+              <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider block mb-1">Step 2 (Active)</span>
+              <span className="text-sm font-semibold text-amber-900 flex items-center">
+                ⏳ Curation Review
+              </span>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">Step 3</span>
+              <span className="text-sm font-medium text-gray-400">
+                Catalog & Storefront Live
+              </span>
+            </div>
+          </div>
+
+          <div className="p-4 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-xs max-w-xl mx-auto text-left leading-relaxed">
+            <p className="font-semibold mb-1">Coming in Sprint 3:</p>
+            <p>
+              Full Vendor Portal suite with KYC document verification, bank account payout setup, staff management, and bespoke luxury storefront branding.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
 type AppView = 'landing' | 'auth' | 'authenticated';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>('landing');
+  const [authOptions, setAuthOptions] = useState<{ mode?: 'login' | 'signup'; role?: 'customer' | 'vendor' }>({
+    mode: 'login',
+    role: 'customer',
+  });
 
   // Check saved session on mount
   useEffect(() => {
     const token = TokenService.getToken();
     const savedUser = TokenService.getUser();
     if (token && savedUser) {
-      const role = (savedUser.role && savedUser.role.includes('admin')) ? 'admin' : 'customer';
+      let role: 'customer' | 'admin' | 'vendor' = 'customer';
+      if (savedUser.role && (savedUser.role === 'vendor_owner' || savedUser.role === 'vendor_staff')) {
+        role = 'vendor';
+      } else if (savedUser.role && savedUser.role.includes('admin')) {
+        role = 'admin';
+      }
+
       setUser({
         id: 1,
-        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : 'Customer'),
+        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : role === 'vendor' ? 'Vendor Partner' : 'Customer'),
         email: savedUser.email || '',
         role: role,
         profilePictureUrl: savedUser.avatar_url || (role === 'admin' ? mockAdminUser.profilePictureUrl : mockUser.profilePictureUrl),
@@ -272,16 +355,21 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleGetStarted = () => {
+  const handleGetStarted = (options?: { mode?: 'login' | 'signup'; role?: 'customer' | 'vendor' }) => {
+    if (options) {
+      setAuthOptions(options);
+    } else {
+      setAuthOptions({ mode: 'login', role: 'customer' });
+    }
     setView('auth');
   };
 
-  const handleLogin = (role: 'customer' | 'admin') => {
+  const handleLogin = (role: 'customer' | 'admin' | 'vendor') => {
     const savedUser = TokenService.getUser();
     if (savedUser) {
       setUser({
         id: 1,
-        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : 'Customer'),
+        name: `${savedUser.first_name || ''} ${savedUser.last_name || ''}`.trim() || (role === 'admin' ? 'Admin' : role === 'vendor' ? 'Vendor Partner' : 'Customer'),
         email: savedUser.email || (role === 'admin' ? 'admin@luxelane.com' : 'user@luxelane.com'),
         role: role,
         profilePictureUrl: savedUser.avatar_url || (role === 'admin' ? mockAdminUser.profilePictureUrl : mockUser.profilePictureUrl),
@@ -319,13 +407,23 @@ const App: React.FC = () => {
 
   // Show Auth/Login Page
   if (view === 'auth' && !user) {
-    return <LoginPage onLogin={handleLogin} onBackToLanding={handleBackToLanding} />;
+    return (
+      <LoginPage
+        onLogin={handleLogin}
+        onBackToLanding={handleBackToLanding}
+        initialMode={authOptions.mode}
+        initialRole={authOptions.role}
+      />
+    );
   }
 
   // Show Authenticated Views
   if (view === 'authenticated' && user) {
     if (user.role === 'admin') {
       return <AdminView onLogout={handleLogout} />;
+    }
+    if (user.role === 'vendor') {
+      return <VendorPortalPlaceholder user={user} onLogout={handleLogout} />;
     }
     return <CustomerView onLogout={handleLogout} />;
   }
