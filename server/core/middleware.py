@@ -68,7 +68,7 @@ class AuditLogMiddleware:
         try:
             from core.models import AuditLog  # noqa: PLC0415 — deferred import
             AuditLog.objects.create(
-                actor_id=request.user.id,
+                actor=request.user,
                 action=f"{request.method}:{request.path}",
                 target_model="",
                 target_id=None,

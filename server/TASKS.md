@@ -65,25 +65,25 @@
 
 ### Tasks
 
-- [ ] **S1-T1** Create `accounts` app
-- [ ] **S1-T2** `User` model — custom AbstractUser (email, phone, role enum, is_verified, 2FA, avatar_url)
-- [ ] **S1-T3** `OTPVerification` model — code_hash, purpose, expires_at, attempts, consumed_at
-- [ ] **S1-T4** `SocialAccount` model — provider, provider_uid
-- [ ] **S1-T5** Migrations for `accounts`
-- [ ] **S1-T6** Permission classes — `IsSuperAdmin`, `IsPlatformAdmin`, `IsFinanceAdmin`, `IsVendorMember`, `IsWarehouseMember`, `IsAssignedDeliveryAgent`, `IsObjectOwner`
-- [ ] **S1-T7** `UserRegisterSerializer` + `VendorRegisterSerializer` (transaction: User + Vendor(pending))
-- [ ] **S1-T8** `LoginSerializer` + throttled `LoginView` (5/min AnonRateThrottle)
-- [ ] **S1-T9** `TokenRefreshView` (SimpleJWT rotation + blacklist) + `TokenVerifyView`
-- [ ] **S1-T10** `LogoutView` — blacklists refresh token
-- [ ] **S1-T11** OTP service — `generate_otp()`, `verify_otp()`, `send_otp()` (email/SMS stubs)
-- [ ] **S1-T12** `OTPRequestView`, `OTPVerifyView`, `OTPResendView`
-- [ ] **S1-T13** `PasswordForgotView`, `PasswordResetView`, `PasswordChangeView`
-- [ ] **S1-T14** `TwoFactorEnableView` + `TwoFactorVerifyView`
-- [ ] **S1-T15** `UserMeView (RetrieveUpdateAPIView)`
-- [ ] **S1-T16** `AdminUserViewSet` (list/retrieve) + `AdminUserStatusUpdateView` (patch + AuditLog)
-- [ ] **S1-T17** Wire all Sprint 1 URLs under `/api/v1/auth/`, `/api/v1/users/`, `/api/v1/admin/`
+- [x] **S1-T1** Create `accounts` app
+- [x] **S1-T2** `User` model — custom AbstractUser (email, phone, role enum, is_verified, 2FA, avatar_url)
+- [x] **S1-T3** `OTPVerification` model — code_hash, purpose, expires_at, attempts, consumed_at
+- [x] **S1-T4** `SocialAccount` model — provider, provider_uid
+- [x] **S1-T5** Migrations for `accounts`
+- [x] **S1-T6** Permission classes — `IsSuperAdmin`, `IsPlatformAdmin`, `IsFinanceAdmin`, `IsVendorMember`, `IsWarehouseMember`, `IsAssignedDeliveryAgent`, `IsObjectOwner`
+- [x] **S1-T7** `UserRegisterSerializer` + `VendorRegisterSerializer` (transaction: User + Vendor(pending))
+- [x] **S1-T8** `LoginSerializer` + throttled `LoginView` (5/min AnonRateThrottle)
+- [x] **S1-T9** `TokenRefreshView` (SimpleJWT rotation + blacklist) + `TokenVerifyView`
+- [x] **S1-T10** `LogoutView` — blacklists refresh token
+- [x] **S1-T11** OTP service — `generate_otp()`, `verify_otp()`, `send_otp()` (email/SMS stubs)
+- [x] **S1-T12** `OTPRequestView`, `OTPVerifyView`, `OTPResendView`
+- [x] **S1-T13** `PasswordForgotView`, `PasswordResetView`, `PasswordChangeView`
+- [x] **S1-T14** `TwoFactorEnableView` + `TwoFactorVerifyView`
+- [x] **S1-T15** `UserMeView (RetrieveUpdateAPIView)`
+- [x] **S1-T16** `AdminUserViewSet` (list/retrieve) + `AdminUserStatusUpdateView` (patch + AuditLog)
+- [x] **S1-T17** Wire all Sprint 1 URLs under `/api/v1/auth/`, `/api/v1/users/`, `/api/v1/admin/`
 
-**S1 Status: ⏳ Pending**
+**S1 Status: ✅ Complete** — 12 unit tests passing · OpenAPI schema verified · DB migrated
 
 ---
 

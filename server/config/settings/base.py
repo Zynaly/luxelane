@@ -39,8 +39,8 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "core",
+    "accounts",
     # Added sprint-by-sprint:
-    # "accounts",
     # "vendors",
     # "catalog",
     # "warehouse",
@@ -113,7 +113,7 @@ CELERY_TIMEZONE = "UTC"
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-# AUTH_USER_MODEL = "accounts.User"  # uncommented in Sprint 1 when accounts app is added
+AUTH_USER_MODEL = "accounts.User"  # Sprint 1: accounts app installed
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -168,7 +168,7 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
-    # "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.LoginSerializer",  # wired in Sprint 1
+    "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.LoginSerializer",
 }
 
 # ── drf-spectacular ───────────────────────────────────────────────────────────

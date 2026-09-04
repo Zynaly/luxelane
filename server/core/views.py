@@ -13,12 +13,20 @@ from rest_framework.permissions import AllowAny
 from django.conf import settings
 
 
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers
+
+
 class HealthCheckView(APIView):
     """GET /healthz/ — liveness probe. Always returns 200 if the process is alive."""
     permission_classes = [AllowAny]
     authentication_classes = []
     throttle_classes = []
 
+    @extend_schema(
+        tags=["Health"],
+        responses={200: inline_serializer("HealthResponse", fields={"status": serializers.CharField(), "service": serializers.CharField()})},
+    )
     def get(self, request):
         return Response({"status": "ok", "service": "luxelane-api"})
 
@@ -33,6 +41,13 @@ class ReadinessCheckView(APIView):
     authentication_classes = []
     throttle_classes = []
 
+    @extend_schema(
+        tags=["Health"],
+        responses={
+            200: inline_serializer("ReadyOkResponse", fields={"status": serializers.CharField(), "checks": serializers.DictField()}),
+            503: inline_serializer("ReadyDegradedResponse", fields={"status": serializers.CharField(), "checks": serializers.DictField()}),
+        },
+    )
     def get(self, request):
         checks = {}
         healthy = True

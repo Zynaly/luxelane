@@ -43,9 +43,14 @@ class AuditLog(models.Model):
     """
     Append-only audit trail. No soft-delete — never mutated after write.
     Written via core.middleware.AuditLogMiddleware on admin-role mutating requests.
-    actor FK is migrated to a real FK in Sprint 1 once accounts.User exists.
     """
-    actor_id = models.UUIDField(null=True, db_index=True)  # raw UUID; FK wired in Sprint 1
+    actor = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_logs",
+        db_index=True,
+    )
     action = models.CharField(max_length=100, db_index=True)  # e.g. "vendor.approved"
     target_model = models.CharField(max_length=100)
     target_id = models.UUIDField(null=True)
@@ -58,7 +63,6 @@ class AuditLog(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["target_model", "target_id"]),
-            models.Index(fields=["actor_id"]),
         ]
 
     def __str__(self):

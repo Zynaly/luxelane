@@ -8,8 +8,9 @@ urlpatterns = [
     # Sprint 0 — no domain endpoints (health is at root level)
 
     # Sprint 1 — Identity & RBAC
-    # path("auth/", include("accounts.urls.auth")),
-    # path("users/", include("accounts.urls.users")),
+    path("auth/",  include("accounts.urls.auth")),
+    path("users/", include("accounts.urls.users")),
+    path("admin/", include("accounts.urls.admin")),
 
     # Sprint 2 — Addresses / Notifications
     # path("addresses/", include("accounts.urls.addresses")),
