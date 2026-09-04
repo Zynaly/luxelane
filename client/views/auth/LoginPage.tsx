@@ -7,6 +7,7 @@ import {
   searchStates,
   findCountry,
   getStatesForCountry,
+  getCountryPhoneInfo,
   CountryItem,
   StateItem
 } from '../../services/countryData';
@@ -15,6 +16,8 @@ interface LoginPageProps {
   onLogin: (role: 'customer' | 'admin') => void;
   onBackToLanding?: () => void;
 }
+
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -31,12 +34,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Signup form state
+  // Signup form state (defaults to US with +1)
   const [signupData, setSignupData] = useState({
     name: '',
     email: '',
     password: '',
-    phone_number: '',
+    phone_number: '+1',
     country: 'United States',
     country_code: 'US',
     state: 'California',
@@ -78,16 +81,26 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Password Strength Calculation
+  // Active country phone specifications
+  const activePhoneInfo = getCountryPhoneInfo(signupData.country_code || signupData.country);
+
+  // Password Strength Calculation (Requires length, letter, number, and special character)
   const getPasswordStrength = (pass: string) => {
     if (!pass) return { score: 0, label: '', color: 'bg-gray-200' };
-    let score = 0;
-    if (pass.length >= 8) score++;
-    if (pass.length >= 12) score++;
-    if (/[A-Z]/.test(pass) && /[a-z]/.test(pass)) score++;
-    if (/[0-9]/.test(pass) || /[^A-Za-z0-9]/.test(pass)) score++;
+    const hasLength = pass.length >= 8;
+    const hasLetter = /[a-zA-Z]/.test(pass);
+    const hasNumber = /[0-9]/.test(pass);
+    const hasSpecial = SPECIAL_CHAR_REGEX.test(pass);
 
-    if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-red-500' };
+    let score = 0;
+    if (hasLength) score++;
+    if (hasLetter && hasNumber) score++;
+    if (hasSpecial) score++;
+    if (pass.length >= 12 && hasSpecial && hasNumber && hasLetter) score++;
+
+    if (!hasSpecial || score <= 1) {
+      return { score: Math.max(score, 1), label: 'Weak (Special char required)', color: 'bg-red-500' };
+    }
     if (score === 2) return { score: 2, label: 'Fair', color: 'bg-yellow-500' };
     if (score === 3) return { score: 3, label: 'Good', color: 'bg-blue-500' };
     return { score: 4, label: 'Strong', color: 'bg-emerald-500' };
@@ -111,19 +124,28 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
         if (!value) return 'Password is required';
         if (value.length < 8) return 'Password must be at least 8 characters';
         if (!/[a-zA-Z]/.test(value)) return 'Password must contain at least one letter';
-        if (!/[0-9!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)) {
-          return 'Password must contain at least one number or special character';
+        if (!/[0-9]/.test(value)) return 'Password must contain at least one number';
+        if (!SPECIAL_CHAR_REGEX.test(value)) {
+          return 'Password must include at least one special character (!@#$%^&* etc.)';
         }
         return '';
-      case 'phone_number':
+      case 'phone_number': {
+        const phoneInfo = getCountryPhoneInfo(signupData.country_code || signupData.country);
         if (!value.trim()) return 'Phone number is required';
-        if (!value.trim().startsWith('+')) {
-          return "Phone number must start with '+' and country code (e.g. +14155552671)";
+        if (!value.startsWith('+')) return "Phone number must start with '+'";
+        if (!value.startsWith(phoneInfo.phone_code)) {
+          return `Contact number for ${signupData.country} must start with ${phoneInfo.phone_code}`;
         }
-        if (!/^\+[1-9]\d{6,14}$/.test(value.trim())) {
-          return 'Invalid E.164 phone number. Enter + followed by 7-15 digits';
+        const digitsAfterCode = value.slice(phoneInfo.phone_code.length);
+        if (digitsAfterCode.length < phoneInfo.phone_digits) {
+          const missing = phoneInfo.phone_digits - digitsAfterCode.length;
+          return `Incomplete contact number: ${phoneInfo.phone_digits} digits required for ${signupData.country} (${missing} more digit${missing > 1 ? 's' : ''} needed)`;
+        }
+        if (value.length > phoneInfo.max_length) {
+          return `Contact number cannot exceed ${phoneInfo.max_length} characters for ${signupData.country}`;
         }
         return '';
+      }
       case 'country':
         if (!value.trim()) return 'Country is required';
         return '';
@@ -186,13 +208,49 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
     }
   };
 
-  // Country selection handler
+  // Dedicated phone input handler: enforces country prefix and maximum allowed digits
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let raw = e.target.value;
+    const phoneInfo = getCountryPhoneInfo(signupData.country_code || signupData.country);
+
+    // Only allow '+' at the beginning and digits 0-9
+    let cleaned = raw.replace(/[^\d+]/g, '');
+    if (!cleaned.startsWith('+')) {
+      cleaned = phoneInfo.phone_code + cleaned.replace(/\D/g, '');
+    } else {
+      cleaned = '+' + cleaned.slice(1).replace(/\D/g, '');
+    }
+
+    // STRICT LENGTH RESTRICTION: Do not let user write more than max_length for the selected country!
+    if (cleaned.length > phoneInfo.max_length) {
+      cleaned = cleaned.slice(0, phoneInfo.max_length);
+    }
+
+    setSignupData((prev) => ({ ...prev, phone_number: cleaned }));
+
+    if (touched.phone_number) {
+      const err = validateField('phone_number', cleaned);
+      setErrors((prev) => ({ ...prev, phone_number: err }));
+    }
+  };
+
+  // Country selection handler: auto-adjusts state and phone number prefix/limit
   const handleSelectCountry = (country: CountryItem) => {
+    const newPhoneInfo = getCountryPhoneInfo(country.iso2 || country.name);
+
+    // Adapt phone prefix to newly selected country
+    let updatedPhone = signupData.phone_number;
+    const digitsOnly = updatedPhone.replace(/^\+\d+/, '');
+    updatedPhone = newPhoneInfo.phone_code + digitsOnly;
+    if (updatedPhone.length > newPhoneInfo.max_length) {
+      updatedPhone = updatedPhone.slice(0, newPhoneInfo.max_length);
+    }
+
     setSignupData((prev) => ({
       ...prev,
       country: country.name,
       country_code: country.iso2,
-      // If the current state doesn't belong to the newly selected country, reset state
+      phone_number: updatedPhone,
       state: '',
       state_code: '',
     }));
@@ -513,7 +571,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                 )}
               </div>
 
-              {/* Password with Strength Meter */}
+              {/* Password with Strength Meter and Mandatory Special Character */}
               <div>
                 <label htmlFor="signup-password" className="block text-sm font-medium text-gray-700">
                   Password <span className="text-red-500">*</span>
@@ -526,7 +584,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                     value={signupData.password}
                     onChange={handleSignupChange}
                     onBlur={() => handleBlur('password')}
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 8 characters with @$!%*#?&"
                     className={`appearance-none block w-full px-3.5 py-2 pr-10 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
                       touched.password && errors.password
                         ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
@@ -541,6 +599,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                   >
                     <Icon name={showSignupPassword ? 'eye-off' : 'eye'} className="w-5 h-5" />
                   </button>
+                </div>
+
+                {/* Password Requirements Checklist Pills */}
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded border transition-colors ${
+                    signupData.password.length >= 8
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-medium'
+                      : 'bg-gray-50 text-gray-500 border-gray-200'
+                  }`}>
+                    {signupData.password.length >= 8 ? '✓' : '•'} 8+ chars
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded border transition-colors ${
+                    /[a-zA-Z]/.test(signupData.password) && /[0-9]/.test(signupData.password)
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-medium'
+                      : 'bg-gray-50 text-gray-500 border-gray-200'
+                  }`}>
+                    {/[a-zA-Z]/.test(signupData.password) && /[0-9]/.test(signupData.password) ? '✓' : '•'} Letter & number
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded border transition-colors ${
+                    SPECIAL_CHAR_REGEX.test(signupData.password)
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300 font-semibold'
+                      : 'bg-amber-50 text-amber-800 border-amber-300 font-medium'
+                  }`}>
+                    {SPECIAL_CHAR_REGEX.test(signupData.password) ? '✓' : '•'} Special char (!@#$%) *
+                  </span>
                 </div>
 
                 {/* Password Strength Meter */}
@@ -563,25 +646,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                   </div>
                 )}
                 {touched.password && errors.password && (
-                  <p className="mt-1 text-xs text-red-600">{errors.password}</p>
+                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.password}</p>
                 )}
               </div>
 
-              {/* Phone Number */}
+              {/* Phone Number with Strict Country Code Length Limit */}
               <div>
-                <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700">
-                  Phone Number <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="phone_number" className="block text-sm font-medium text-gray-700">
+                    Phone Number <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                    {signupData.phone_number.length} / {activePhoneInfo.max_length} max
+                  </span>
+                </div>
                 <div className="mt-1">
                   <input
                     id="phone_number"
                     name="phone_number"
                     type="tel"
                     value={signupData.phone_number}
-                    onChange={handleSignupChange}
+                    onChange={handlePhoneChange}
                     onBlur={() => handleBlur('phone_number')}
-                    placeholder="+344784701222244"
-                    className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
+                    maxLength={activePhoneInfo.max_length}
+                    placeholder={`${activePhoneInfo.phone_code}XXXXXXXXXX`}
+                    className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors font-mono ${
                       touched.phone_number && errors.phone_number
                         ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
                         : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
@@ -589,9 +678,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                   />
                 </div>
                 {touched.phone_number && errors.phone_number ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.phone_number}</p>
+                  <p className="mt-1 text-xs text-red-600 font-medium">{errors.phone_number}</p>
                 ) : (
-                  <p className="mt-1 text-xs text-gray-400">Include country code starting with '+' (e.g. +14155552671)</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Limit: {activePhoneInfo.phone_code} with up to {activePhoneInfo.phone_digits} national digits ({activePhoneInfo.max_length} characters total for {signupData.country})
+                  </p>
                 )}
               </div>
 
@@ -638,9 +729,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                             className="cursor-pointer select-none relative py-2 px-3.5 hover:bg-gray-100 flex items-center justify-between transition-colors"
                           >
                             <span className="font-medium text-gray-900 text-sm truncate">{c.name}</span>
-                            <span className="ml-2 text-xs font-mono font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                              {c.iso2}
-                            </span>
+                            <div className="flex items-center gap-1.5 ml-2">
+                              <span className="text-[11px] font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                {c.phone_code || getCountryPhoneInfo(c.iso2).phone_code}
+                              </span>
+                              <span className="text-xs font-mono font-semibold bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                                {c.iso2}
+                              </span>
+                            </div>
                           </div>
                         ))
                       )}
@@ -667,8 +763,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                         setSignupData((prev) => ({ ...prev, country_code: val }));
                         const found = findCountry(val);
                         if (found) {
-                          setSignupData((prev) => ({ ...prev, country: found.name, country_code: found.iso2 }));
-                          setCountryQuery(found.name);
+                          handleSelectCountry(found);
                         }
                       }}
                       onBlur={() => handleBlur('country_code')}

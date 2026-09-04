@@ -332,3 +332,59 @@ export function searchStates(countryNameOrCode: string, query: string): StateIte
     .filter((s) => s.name.toLowerCase().includes(q) || s.state_code.toLowerCase().includes(q))
     .slice(0, 40);
 }
+
+// Phone dialing code and standard national phone digit limits by ISO-2 code
+export const COUNTRY_PHONE_MAP: Record<string, { code: string; digits: number }> = {
+  US: { code: '+1', digits: 10 },
+  CA: { code: '+1', digits: 10 },
+  GB: { code: '+44', digits: 10 },
+  PK: { code: '+92', digits: 10 },
+  IN: { code: '+91', digits: 10 },
+  AU: { code: '+61', digits: 9 },
+  DE: { code: '+49', digits: 11 },
+  FR: { code: '+33', digits: 9 },
+  AE: { code: '+971', digits: 9 },
+  SA: { code: '+966', digits: 9 },
+  IT: { code: '+39', digits: 10 },
+  ES: { code: '+34', digits: 9 },
+  BR: { code: '+55', digits: 11 },
+  MX: { code: '+52', digits: 10 },
+  JP: { code: '+81', digits: 10 },
+  CN: { code: '+86', digits: 11 },
+  TR: { code: '+90', digits: 10 },
+  BD: { code: '+880', digits: 10 },
+  NG: { code: '+234', digits: 10 },
+  EG: { code: '+20', digits: 10 },
+  ZA: { code: '+27', digits: 9 },
+  RU: { code: '+7', digits: 10 },
+  SG: { code: '+65', digits: 8 },
+  MY: { code: '+60', digits: 9 },
+  NZ: { code: '+64', digits: 9 },
+  NL: { code: '+31', digits: 9 },
+  SE: { code: '+46', digits: 9 },
+  CH: { code: '+41', digits: 9 },
+  IE: { code: '+353', digits: 9 },
+  PH: { code: '+63', digits: 10 },
+  ID: { code: '+62', digits: 10 },
+  TH: { code: '+66', digits: 9 },
+  VN: { code: '+84', digits: 9 },
+  KR: { code: '+82', digits: 10 },
+  KW: { code: '+965', digits: 8 },
+  QA: { code: '+974', digits: 8 },
+  OM: { code: '+968', digits: 8 },
+  BH: { code: '+973', digits: 8 },
+};
+
+export function getCountryPhoneInfo(countryNameOrCode: string): { phone_code: string; phone_digits: number; max_length: number } {
+  const c = findCountry(countryNameOrCode);
+  const iso = (c?.iso2 || countryNameOrCode || 'US').toUpperCase();
+  const info = COUNTRY_PHONE_MAP[iso] || {
+    code: c?.phone_code || '+1',
+    digits: 10,
+  };
+  const phone_code = info.code.startsWith('+') ? info.code : `+${info.code}`;
+  const phone_digits = info.digits;
+  const max_length = phone_code.length + phone_digits;
+  return { phone_code, phone_digits, max_length };
+}
+
