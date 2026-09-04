@@ -58,23 +58,25 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
             </div>
           </div>
 
+          {/* Mobile menu toggle */}
           <div className="flex items-center lg:hidden">
             <button onClick={() => setMenuOpen(!menuOpen)} type="button" className="bg-white p-2 rounded-md text-gray-400">
-              <Icon name="menu" className="h-6 w-6" />
+              <Icon name={menuOpen ? 'x' : 'menu'} className="h-6 w-6" />
             </button>
           </div>
 
+          {/* Desktop icons */}
           <div className="hidden lg:flex lg:items-center lg:space-x-4">
-             <button onClick={() => onNavigate('account')} className="p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors">
+             <button onClick={() => onNavigate('account')} className="p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors" title="My Account" id="header-account-btn">
                 <Icon name="user" className="h-6 w-6"/>
             </button>
-            <button onClick={() => onNavigate('cart')} className="relative p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors">
+            <button onClick={() => onNavigate('cart')} className="relative p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors" title="Cart" id="header-cart-btn">
                 <Icon name="cart" className="h-6 w-6"/>
                 {cartItemCount > 0 && (
                   <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-accent text-white text-xs font-medium transform -translate-y-1/2 translate-x-1/2 ring-2 ring-white">{cartItemCount}</span>
                 )}
             </button>
-            <button onClick={onLogout} className="p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors" title="Logout">
+            <button onClick={onLogout} className="p-2 rounded-full text-gray-500 hover:text-dark hover:bg-gray-100 transition-colors" title="Sign Out" id="header-logout-btn">
                 <Icon name="logout" className="h-6 w-6"/>
             </button>
           </div>
@@ -87,13 +89,26 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
             <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('contact'); }} className="text-gray-600 hover:text-dark text-sm font-semibold transition-colors">Contact</a>
         </nav>
 
+        {/* Mobile dropdown menu */}
         {menuOpen && (
-            <div className="lg:hidden">
+            <div className="lg:hidden border-t border-gray-100">
                 <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('home'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Home</a>
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('shop'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Shop</a>
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('about'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">About</a>
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('contact'); setMenuOpen(false); }} className="text-gray-600 hover:text-dark block px-3 py-2 rounded-md text-base font-medium">Contact</a>
+                </div>
+                <div className="px-2 pb-3 border-t border-gray-100 pt-2 flex items-center space-x-2 sm:px-3">
+                    <button onClick={() => { onNavigate('account'); setMenuOpen(false); }} className="flex-1 flex items-center justify-center px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                      <Icon name="user" className="h-5 w-5 mr-2" /> My Account
+                    </button>
+                    <button onClick={() => { onNavigate('cart'); setMenuOpen(false); }} className="relative flex-1 flex items-center justify-center px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                      <Icon name="cart" className="h-5 w-5 mr-2" /> Cart
+                      {cartItemCount > 0 && <span className="ml-1 bg-accent text-white text-xs rounded-full px-1.5">{cartItemCount}</span>}
+                    </button>
+                    <button onClick={onLogout} className="flex-1 flex items-center justify-center px-3 py-2 rounded-md text-base font-medium text-red-600 hover:bg-red-50">
+                      <Icon name="logout" className="h-5 w-5 mr-2" /> Sign Out
+                    </button>
                 </div>
             </div>
         )}
@@ -102,12 +117,14 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
   );
 };
 
-const Footer: React.FC = () => (
+const Footer: React.FC<{ onNavigate?: (page: CustomerPage) => void }> = ({ onNavigate }) => {
+  const nav = (page: CustomerPage) => (e: React.MouseEvent) => { e.preventDefault(); onNavigate?.(page); };
+  return (
     <footer className="bg-dark text-white">
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
             <div className="xl:grid xl:grid-cols-3 xl:gap-8">
                 <div className="space-y-8 xl:col-span-1">
-                    <span className="text-3xl font-serif font-bold text-white">LuxeLane</span>
+                    <span className="text-3xl font-serif font-bold text-white cursor-pointer" onClick={nav('home')}>LuxeLane</span>
                     <p className="text-gray-400 text-base">Crafting timeless pieces for the modern lifestyle.</p>
                 </div>
                 <div className="mt-12 grid grid-cols-2 gap-8 xl:mt-0 xl:col-span-2">
@@ -115,17 +132,17 @@ const Footer: React.FC = () => (
                         <div>
                             <h3 className="text-sm font-semibold tracking-wider uppercase">Shop</h3>
                             <ul className="mt-4 space-y-2">
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">New Arrivals</a></li>
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">Best Sellers</a></li>
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">Sale</a></li>
+                                <li><a href="#" onClick={nav('shop')} className="text-base text-gray-300 hover:text-white transition-colors">New Arrivals</a></li>
+                                <li><a href="#" onClick={nav('shop')} className="text-base text-gray-300 hover:text-white transition-colors">Best Sellers</a></li>
+                                <li><a href="#" onClick={nav('shop')} className="text-base text-gray-300 hover:text-white transition-colors">Sale</a></li>
                             </ul>
                         </div>
                         <div className="mt-12 md:mt-0">
                             <h3 className="text-sm font-semibold tracking-wider uppercase">Support</h3>
                             <ul className="mt-4 space-y-2">
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">Contact Us</a></li>
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">FAQs</a></li>
-                                <li><a href="#" className="text-base text-gray-300 hover:text-white">Shipping & Returns</a></li>
+                                <li><a href="#" onClick={nav('contact')} className="text-base text-gray-300 hover:text-white transition-colors">Contact Us</a></li>
+                                <li><a href="#" onClick={nav('about')} className="text-base text-gray-300 hover:text-white transition-colors">FAQs</a></li>
+                                <li><a href="#" onClick={nav('about')} className="text-base text-gray-300 hover:text-white transition-colors">Shipping & Returns</a></li>
                             </ul>
                         </div>
                     </div>
@@ -133,11 +150,11 @@ const Footer: React.FC = () => (
                          <div>
                             <h3 className="text-sm font-semibold tracking-wider uppercase">Join our newsletter</h3>
                             <p className="text-gray-400 mt-4">Get the latest arrivals and special offers directly in your inbox.</p>
-                             <form className="mt-4 sm:flex sm:max-w-md">
-                                <label htmlFor="email-address" className="sr-only">Email address</label>
-                                <input type="email" name="email-address" id="email-address" autoComplete="email" required className="appearance-none min-w-0 w-full bg-white border border-transparent rounded-md py-2 px-4 text-base text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white focus:border-white focus:placeholder-gray-400" placeholder="Enter your email" />
+                             <form className="mt-4 sm:flex sm:max-w-md" onSubmit={(e) => e.preventDefault()}>
+                                <label htmlFor="footer-email" className="sr-only">Email address</label>
+                                <input type="email" name="email-address" id="footer-email" autoComplete="email" required className="appearance-none min-w-0 w-full bg-white border border-transparent rounded-md py-2 px-4 text-base text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-white focus:border-white focus:placeholder-gray-400" placeholder="Enter your email" />
                                 <div className="mt-3 rounded-md sm:mt-0 sm:ml-3 sm:flex-shrink-0">
-                                    <button type="submit" className="w-full bg-accent border border-transparent rounded-md py-2 px-4 flex items-center justify-center text-base font-medium text-white hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-accent">
+                                    <button type="submit" className="w-full bg-accent border border-transparent rounded-md py-2 px-4 flex items-center justify-center text-base font-medium text-white hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-accent transition-colors">
                                         Subscribe
                                     </button>
                                 </div>
@@ -147,11 +164,16 @@ const Footer: React.FC = () => (
                 </div>
             </div>
             <div className="mt-8 border-t border-gray-700 pt-8 flex items-center justify-between">
-                <p className="text-base text-gray-400">&copy; 2024 LuxeLane, Inc. All rights reserved.</p>
+                <p className="text-base text-gray-400">&copy; {new Date().getFullYear()} LuxeLane, Inc. All rights reserved.</p>
+                <div className="flex space-x-6">
+                  <a href="#" onClick={nav('about')} className="text-gray-400 hover:text-white text-sm transition-colors">Privacy Policy</a>
+                  <a href="#" onClick={nav('about')} className="text-gray-400 hover:text-white text-sm transition-colors">Terms of Service</a>
+                </div>
             </div>
         </div>
     </footer>
-);
+  );
+};
 
 const AdminSidebar: React.FC<{ currentPage: AdminPage; onNavigate: (page: AdminPage) => void; onLogout: () => void }> = ({ currentPage, onNavigate, onLogout }) => {
     const navItemClasses = (page: AdminPage) => `flex items-center px-4 py-3 text-gray-200 hover:bg-gray-700 rounded-md transition-colors duration-200 ${currentPage === page ? 'bg-primary' : ''}`;
@@ -219,7 +241,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     <div className="flex flex-col min-h-screen bg-white">
       <Header onNavigate={setPage} onLogout={onLogout} />
       <main className="flex-grow">{renderPage()}</main>
-      <Footer />
+      <Footer onNavigate={setPage} />
       <ChatbotWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(prev => !prev)}/>
     </div>
   );

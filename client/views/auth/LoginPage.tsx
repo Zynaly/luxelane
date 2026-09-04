@@ -285,7 +285,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
         return;
       }
       allTouched[field] = true;
-      const err = validateField(field, value);
+      const err = validateField(field, String(value ?? ''));
       if (err) newErrors[field] = err;
     });
 

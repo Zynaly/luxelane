@@ -6,7 +6,16 @@ interface AccountPageProps {
   onLogout?: () => void;
 }
 
-const AccountPage: React.FC<AccountPageProps> = () => {
+const ROLE_LABELS: Record<string, string> = {
+  customer: 'Customer',
+  vendor_owner: 'Vendor Owner',
+  vendor_staff: 'Vendor Staff',
+  warehouse_manager: 'Warehouse Manager',
+  warehouse_staff: 'Warehouse Staff',
+  platform_admin: 'Platform Admin',
+};
+
+const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'notifications' | 'security'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -21,11 +30,14 @@ const AccountPage: React.FC<AccountPageProps> = () => {
     avatar_url?: string;
     two_factor_enabled?: boolean;
     is_verified?: boolean;
+    role?: string;
+    created_at?: string;
   }>({});
 
   // Addresses State
   const [addresses, setAddresses] = useState<AddressData[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<AddressData | null>(null);
   const [addressForm, setAddressForm] = useState<AddressData>({
     label: 'Home',
     line1: '',
@@ -125,28 +137,33 @@ const AccountPage: React.FC<AccountPageProps> = () => {
     }
   };
 
-  // Address create handler
+  // Address create/update handler
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Validate with geocoding first
-      const validated = await API.Address.validateAddress({
-        line1: addressForm.line1,
-        city: addressForm.city,
-        state: addressForm.state,
-        country: addressForm.country,
-        postal_code: addressForm.postal_code,
-      });
-
-      await API.Address.createAddress({
-        ...addressForm,
-        latitude: validated.latitude,
-        longitude: validated.longitude,
-      });
-
-      showMsg('Address added and geocoded successfully!');
+      if (editingAddress?.id) {
+        // Update existing
+        await API.Address.updateAddress(editingAddress.id, addressForm);
+        showMsg('Address updated successfully!');
+      } else {
+        // Validate with geocoding first
+        const validated = await API.Address.validateAddress({
+          line1: addressForm.line1,
+          city: addressForm.city,
+          state: addressForm.state,
+          country: addressForm.country,
+          postal_code: addressForm.postal_code,
+        });
+        await API.Address.createAddress({
+          ...addressForm,
+          latitude: validated.latitude,
+          longitude: validated.longitude,
+        });
+        showMsg('Address added and geocoded successfully!');
+      }
       setShowAddressModal(false);
+      setEditingAddress(null);
       setAddressForm({
         label: 'Home',
         line1: '',
@@ -165,6 +182,29 @@ const AccountPage: React.FC<AccountPageProps> = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openEditAddress = (addr: AddressData) => {
+    setEditingAddress(addr);
+    setAddressForm({ ...addr });
+    setShowAddressModal(true);
+  };
+
+  const openAddAddress = () => {
+    setEditingAddress(null);
+    setAddressForm({
+      label: 'Home',
+      line1: '',
+      line2: '',
+      city: '',
+      state: '',
+      country: 'US',
+      postal_code: '',
+      type: 'both',
+      is_default: false,
+      contact_phone: '',
+    });
+    setShowAddressModal(true);
   };
 
   // Delete address
@@ -250,19 +290,41 @@ const AccountPage: React.FC<AccountPageProps> = () => {
 
       {message && (
         <div
-          className={`mb-6 p-4 rounded-lg text-sm font-medium ${
+          className={`mb-6 p-4 rounded-lg text-sm font-medium flex items-center justify-between ${
             message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'
           }`}
         >
-          {message.text}
+          <span>{message.text}</span>
+          <button onClick={() => setMessage(null)} className="ml-4 text-current opacity-60 hover:opacity-100">✕</button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        {/* Sidebar Tabs */}
+        {/* Sidebar */}
         <aside className="lg:col-span-1">
+          {/* Profile summary card */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-3 flex items-center space-x-3">
+            <img
+              src={profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent((profile.first_name || '') + ' ' + (profile.last_name || ''))}&background=1a56db&color=fff&size=80`}
+              alt="Avatar"
+              className="w-12 h-12 rounded-full object-cover border-2 border-primary/20 flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-900 text-sm truncate">
+                {profile.first_name ? `${profile.first_name} ${profile.last_name || ''}`.trim() : 'Loading...'}
+              </p>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary mt-0.5">
+                {ROLE_LABELS[profile.role as string] || profile.role || 'Customer'}
+              </span>
+              {profile.is_verified && (
+                <span className="inline-flex items-center ml-1 text-green-600 text-xs">✓ Verified</span>
+              )}
+            </div>
+          </div>
+
           <nav className="space-y-1 bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
             <button
+              id="account-tab-profile"
               onClick={() => setActiveTab('profile')}
               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                 activeTab === 'profile' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
@@ -271,6 +333,7 @@ const AccountPage: React.FC<AccountPageProps> = () => {
               <Icon name="user" className="w-5 h-5 mr-3" /> Profile Details
             </button>
             <button
+              id="account-tab-addresses"
               onClick={() => setActiveTab('addresses')}
               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                 activeTab === 'addresses' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
@@ -279,6 +342,7 @@ const AccountPage: React.FC<AccountPageProps> = () => {
               <Icon name="warehouse" className="w-5 h-5 mr-3" /> Saved Addresses ({addresses.length})
             </button>
             <button
+              id="account-tab-notifications"
               onClick={() => setActiveTab('notifications')}
               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                 activeTab === 'notifications' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
@@ -287,6 +351,7 @@ const AccountPage: React.FC<AccountPageProps> = () => {
               <Icon name="chat-bubble" className="w-5 h-5 mr-3" /> Notifications ({notifications.filter(n => n.status !== 'read').length})
             </button>
             <button
+              id="account-tab-security"
               onClick={() => setActiveTab('security')}
               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                 activeTab === 'security' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
@@ -294,6 +359,15 @@ const AccountPage: React.FC<AccountPageProps> = () => {
             >
               <Icon name="lock" className="w-5 h-5 mr-3" /> Security & 2FA
             </button>
+            <div className="pt-2 border-t border-gray-100 mt-2">
+              <button
+                id="account-logout-btn"
+                onClick={onLogout}
+                className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <Icon name="logout" className="w-5 h-5 mr-3" /> Sign Out
+              </button>
+            </div>
           </nav>
         </aside>
 
@@ -303,16 +377,38 @@ const AccountPage: React.FC<AccountPageProps> = () => {
           {activeTab === 'profile' && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
               <h2 className="text-xl font-bold text-gray-900 mb-6">Personal Information</h2>
+
+              {/* Account meta */}
+              <div className="flex flex-wrap gap-3 mb-6">
+                {profile.role && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
+                    {ROLE_LABELS[profile.role as string] || profile.role}
+                  </span>
+                )}
+                {profile.is_verified && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                    ✓ Email Verified
+                  </span>
+                )}
+                {profile.created_at && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    Member since {new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+
               <div className="flex items-center space-x-6 mb-8">
-                <img
-                  src={profile.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256'}
-                  alt="Avatar"
-                  className="w-20 h-20 rounded-full object-cover border border-gray-300"
-                />
+                <div className="relative">
+                  <img
+                    src={profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent((profile.first_name || '') + ' ' + (profile.last_name || ''))}&background=1a56db&color=fff&size=160`}
+                    alt="Avatar"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-200 shadow-sm"
+                  />
+                </div>
                 <div>
-                  <label className="inline-block cursor-pointer bg-white border border-gray-300 px-4 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm">
-                    Upload Avatar
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                  <label className="inline-block cursor-pointer bg-white border border-gray-300 px-4 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition-colors">
+                    Upload New Photo
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} id="avatar-upload-input" />
                   </label>
                   <p className="text-xs text-gray-500 mt-1">JPEG, PNG, or WEBP up to 5MB.</p>
                 </div>
@@ -382,7 +478,8 @@ const AccountPage: React.FC<AccountPageProps> = () => {
                   <p className="text-sm text-gray-500">Addresses are geocoded automatically for delivery verification.</p>
                 </div>
                 <button
-                  onClick={() => setShowAddressModal(true)}
+                  id="add-address-btn"
+                  onClick={openAddAddress}
                   className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
                 >
                   + Add New Address
@@ -391,7 +488,9 @@ const AccountPage: React.FC<AccountPageProps> = () => {
 
               {addresses.length === 0 ? (
                 <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                  <Icon name="warehouse" className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                   <p className="text-gray-500 text-sm">No saved addresses yet.</p>
+                  <button onClick={openAddAddress} className="mt-3 text-primary text-sm font-medium hover:underline">Add your first address</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -412,10 +511,16 @@ const AccountPage: React.FC<AccountPageProps> = () => {
                       </p>
                       {addr.latitude && addr.longitude && (
                         <p className="text-xs text-gray-400 mt-2 font-mono">
-                          Coords: {Number(addr.latitude).toFixed(4)}, {Number(addr.longitude).toFixed(4)}
+                          📍 {Number(addr.latitude).toFixed(4)}, {Number(addr.longitude).toFixed(4)}
                         </p>
                       )}
-                      <div className="mt-4 pt-2 border-t border-gray-100 flex justify-end">
+                      <div className="mt-4 pt-2 border-t border-gray-100 flex justify-end space-x-3">
+                        <button
+                          onClick={() => openEditAddress(addr)}
+                          className="text-primary hover:text-primary-hover text-xs font-medium"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => addr.id && handleDeleteAddress(addr.id)}
                           className="text-red-600 hover:text-red-800 text-xs font-medium"
@@ -559,11 +664,14 @@ const AccountPage: React.FC<AccountPageProps> = () => {
         </main>
       </div>
 
-      {/* ADD ADDRESS MODAL */}
+      {/* ADD / EDIT ADDRESS MODAL */}
       {showAddressModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" id="address-modal">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Add Delivery Address</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">{editingAddress ? 'Edit Address' : 'Add Delivery Address'}</h3>
+              <button onClick={() => { setShowAddressModal(false); setEditingAddress(null); }} className="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
             <form onSubmit={handleSaveAddress} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
@@ -587,6 +695,16 @@ const AccountPage: React.FC<AccountPageProps> = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Apartment / Suite (optional)</label>
+                <input
+                  type="text"
+                  value={addressForm.line2 || ''}
+                  onChange={e => setAddressForm({ ...addressForm, line2: e.target.value })}
+                  placeholder="Apt 4B"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">City</label>
@@ -602,9 +720,8 @@ const AccountPage: React.FC<AccountPageProps> = () => {
                   <label className="block text-xs font-medium text-gray-700 mb-1">State / Province</label>
                   <input
                     type="text"
-                    value={addressForm.state}
+                    value={addressForm.state || ''}
                     onChange={e => setAddressForm({ ...addressForm, state: e.target.value })}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
@@ -624,38 +741,51 @@ const AccountPage: React.FC<AccountPageProps> = () => {
                   <label className="block text-xs font-medium text-gray-700 mb-1">Country</label>
                   <input
                     type="text"
-                    value={addressForm.country}
+                    value={addressForm.country || 'US'}
                     onChange={e => setAddressForm({ ...addressForm, country: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                <select
+                  value={addressForm.type || 'both'}
+                  onChange={e => setAddressForm({ ...addressForm, type: e.target.value as 'shipping' | 'billing' | 'both' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                >
+                  <option value="both">Shipping & Billing</option>
+                  <option value="shipping">Shipping only</option>
+                  <option value="billing">Billing only</option>
+                </select>
+              </div>
               <div className="flex items-center mt-2">
                 <input
                   type="checkbox"
                   id="is_default"
-                  checked={addressForm.is_default}
+                  checked={addressForm.is_default || false}
                   onChange={e => setAddressForm({ ...addressForm, is_default: e.target.checked })}
                   className="h-4 w-4 text-primary rounded border-gray-300"
                 />
                 <label htmlFor="is_default" className="ml-2 text-sm text-gray-700">
-                  Set as default shipping & billing address
+                  Set as default address
                 </label>
               </div>
               <div className="pt-4 flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddressModal(false)}
+                  onClick={() => { setShowAddressModal(false); setEditingAddress(null); }}
                   className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  id="address-save-btn"
                   disabled={loading}
                   className="bg-primary text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
                 >
-                  {loading ? 'Validating & Saving...' : 'Save Address'}
+                  {loading ? (editingAddress ? 'Saving...' : 'Validating & Saving...') : (editingAddress ? 'Save Changes' : 'Save Address')}
                 </button>
               </div>
             </form>

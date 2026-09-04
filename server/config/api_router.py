@@ -3,6 +3,7 @@ API v1 router — include each app's urls as sprints are completed.
 Uncomment each line as the corresponding sprint is finished.
 """
 from django.urls import path, include
+from vendors.urls import admin_urlpatterns as vendor_admin_urls
 
 urlpatterns = [
     # Sprint 0 — no domain endpoints (health is at root level)
@@ -18,7 +19,8 @@ urlpatterns = [
     path("media/", include("core.urls.media")),
 
     # Sprint 3 — Vendors
-    # path("vendors/", include("vendors.urls")),
+    path("vendors/", include("vendors.urls")),
+    path("admin/", include(vendor_admin_urls)),
 
     # Sprint 4 — Catalog
     # path("categories/", include("catalog.urls.categories")),

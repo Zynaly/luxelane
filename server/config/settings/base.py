@@ -41,8 +41,9 @@ LOCAL_APPS = [
     "core",
     "accounts",
     "notifications",
+    # Sprint 3:
+    "vendors",
     # Added sprint-by-sprint:
-    # "vendors",
     # "catalog",
     # "warehouse",
     # "cart_and_pricing",

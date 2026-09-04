@@ -88,7 +88,7 @@ class AuditLogMiddleware:
 
             AuditLog.objects.create(
                 actor=request.user,
-                action=f"{request.method}:{request.path}",
+                action=f"{request.method}:{request.path}"[:200],
                 target_model=str(target_model)[:100],
                 target_id=target_id if target_id else None,
                 before=None,
