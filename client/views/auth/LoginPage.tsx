@@ -11,6 +11,12 @@ import {
   CountryItem,
   StateItem
 } from '../../services/countryData';
+import {
+  searchAddressSuggestions,
+  lookupPostalCode,
+  searchCitiesForState,
+  AddressSuggestion
+} from '../../services/addressLookupService';
 
 interface LoginPageProps {
   onLogin: (role: 'customer' | 'admin') => void;
@@ -59,8 +65,21 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
   const [stateQuery, setStateQuery] = useState('California');
   const [isStateOpen, setIsStateOpen] = useState(false);
 
+  // Address & City API Autocomplete states
+  const [addressSuggestions, setAddressSuggestions] = useState<AddressSuggestion[]>([]);
+  const [isAddressOpen, setIsAddressOpen] = useState(false);
+  const [isLoadingAddress, setIsLoadingAddress] = useState(false);
+
+  const [citySuggestions, setCitySuggestions] = useState<string[]>([]);
+  const [isCityOpen, setIsCityOpen] = useState(false);
+
+  const [zipLookupStatus, setZipLookupStatus] = useState<string | null>(null);
+  const [isLookingUpZip, setIsLookingUpZip] = useState(false);
+
   const countryRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<HTMLDivElement>(null);
+  const addressRef = useRef<HTMLDivElement>(null);
+  const cityRef = useRef<HTMLDivElement>(null);
 
   // Load complete world country database in background
   useEffect(() => {
@@ -75,6 +94,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
       }
       if (stateRef.current && !stateRef.current.contains(event.target as Node)) {
         setIsStateOpen(false);
+      }
+      if (addressRef.current && !addressRef.current.contains(event.target as Node)) {
+        setIsAddressOpen(false);
+      }
+      if (cityRef.current && !cityRef.current.contains(event.target as Node)) {
+        setIsCityOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -274,6 +299,137 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
 
     setTouched((prev) => ({ ...prev, state: true, state_code: true }));
     setErrors((prev) => ({ ...prev, state: '', state_code: '' }));
+  };
+
+  // ── Address Autocomplete API Handler ───────────────────────────────────────
+  const handleAddressInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSignupData((prev) => ({ ...prev, address: val }));
+
+    if (touched.address) {
+      const err = validateField('address', val);
+      setErrors((prev) => ({ ...prev, address: err }));
+    }
+
+    if (val.trim().length >= 3) {
+      setIsLoadingAddress(true);
+      setIsAddressOpen(true);
+      searchAddressSuggestions(val, signupData.country_code).then((results) => {
+        setAddressSuggestions(results);
+        setIsLoadingAddress(false);
+      });
+    } else {
+      setAddressSuggestions([]);
+      setIsAddressOpen(false);
+    }
+  };
+
+  // Auto-fill all address fields from a selected verified address suggestion
+  const handleSelectAddressSuggestion = (suggestion: AddressSuggestion) => {
+    setSignupData((prev) => {
+      const newCountry = suggestion.country || prev.country;
+      const newCountryCode = suggestion.country_code || prev.country_code;
+      const newPhoneInfo = getCountryPhoneInfo(newCountryCode || newCountry);
+      const digitsOnly = prev.phone_number.replace(/^\+\d+/, '');
+      const updatedPhone = (newPhoneInfo.phone_code + digitsOnly).slice(0, newPhoneInfo.max_length);
+
+      return {
+        ...prev,
+        address: suggestion.street || prev.address,
+        city: suggestion.city || prev.city,
+        state: suggestion.state || prev.state,
+        state_code: suggestion.state_code || prev.state_code,
+        zip_code: suggestion.postal_code || prev.zip_code,
+        country: newCountry,
+        country_code: newCountryCode,
+        phone_number: updatedPhone,
+      };
+    });
+
+    if (suggestion.country) setCountryQuery(suggestion.country);
+    if (suggestion.state) setStateQuery(suggestion.state);
+
+    setIsAddressOpen(false);
+    setAddressSuggestions([]);
+
+    // Clear related errors
+    setErrors((prev) => ({
+      ...prev,
+      address: '',
+      city: '',
+      state: '',
+      state_code: '',
+      zip_code: '',
+      country: '',
+      country_code: '',
+    }));
+  };
+
+  // ── City Autocomplete in State Handler ──────────────────────────────────────
+  const handleCityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSignupData((prev) => ({ ...prev, city: val }));
+
+    if (touched.city) {
+      const err = validateField('city', val);
+      setErrors((prev) => ({ ...prev, city: err }));
+    }
+
+    if (val.trim().length >= 2) {
+      setIsCityOpen(true);
+      searchCitiesForState(val, signupData.state, signupData.country).then((cities) => {
+        setCitySuggestions(cities);
+      });
+    } else {
+      setCitySuggestions([]);
+      setIsCityOpen(false);
+    }
+  };
+
+  const handleSelectCity = (cityName: string) => {
+    setSignupData((prev) => ({ ...prev, city: cityName }));
+    setIsCityOpen(false);
+    setTouched((prev) => ({ ...prev, city: true }));
+    setErrors((prev) => ({ ...prev, city: '' }));
+  };
+
+  // ── ZIP Code Auto-Lookup Handler (Zippopotam.us + Nominatim) ───────────────
+  const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.trim();
+    setSignupData((prev) => ({ ...prev, zip_code: val }));
+
+    if (touched.zip_code) {
+      const err = validateField('zip_code', val);
+      setErrors((prev) => ({ ...prev, zip_code: err }));
+    }
+
+    // Trigger auto-lookup when 4 or more characters entered
+    if (val.length >= 4) {
+      setIsLookingUpZip(true);
+      setZipLookupStatus('Looking up city & state...');
+      lookupPostalCode(val, signupData.country_code).then((result) => {
+        setIsLookingUpZip(false);
+        if (result && result.city && result.state) {
+          setSignupData((prev) => ({
+            ...prev,
+            city: result.city,
+            state: result.state,
+            state_code: result.state_code || prev.state_code,
+            country: result.country || prev.country,
+            country_code: result.country_code || prev.country_code,
+          }));
+          setStateQuery(result.state);
+          if (result.country) setCountryQuery(result.country);
+          setZipLookupStatus(`✓ Auto-detected: ${result.city}, ${result.state_code || result.state}`);
+          setErrors((prev) => ({ ...prev, city: '', state: '', state_code: '', zip_code: '' }));
+          setTimeout(() => setZipLookupStatus(null), 4000);
+        } else {
+          setZipLookupStatus(null);
+        }
+      });
+    } else {
+      setZipLookupStatus(null);
+    }
   };
 
   // Login submission
@@ -862,19 +1018,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                 </div>
               </div>
 
-              {/* City & ZIP Code */}
+              {/* City (with State-Scoped Autocomplete) & ZIP Code (with Auto-detection) */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                {/* City with Suggestion Dropdown */}
+                <div className="relative" ref={cityRef}>
                   <label htmlFor="city" className="block text-sm font-medium text-gray-700">
                     City <span className="text-red-500">*</span>
                   </label>
-                  <div className="mt-1">
+                  <div className="mt-1 relative">
                     <input
                       id="city"
                       name="city"
                       type="text"
                       value={signupData.city}
-                      onChange={handleSignupChange}
+                      onChange={handleCityInputChange}
+                      onFocus={() => {
+                        if (signupData.city.trim().length >= 2) setIsCityOpen(true);
+                      }}
                       onBlur={() => handleBlur('city')}
                       placeholder="San Francisco"
                       className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
@@ -884,22 +1044,44 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                       }`}
                     />
                   </div>
+
+                  {/* City Dropdown Menu */}
+                  {isCityOpen && citySuggestions.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl max-h-48 rounded-xl py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-gray-100">
+                      {citySuggestions.map((cName) => (
+                        <div
+                          key={cName}
+                          onMouseDown={() => handleSelectCity(cName)}
+                          className="cursor-pointer select-none relative py-2 px-3.5 hover:bg-gray-100 flex items-center justify-between transition-colors"
+                        >
+                          <span className="font-medium text-gray-900 text-sm truncate">{cName}</span>
+                          <span className="text-xs text-gray-400 font-medium">in {signupData.state || 'State'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {touched.city && errors.city && (
                     <p className="mt-1 text-xs text-red-600">{errors.city}</p>
                   )}
                 </div>
 
+                {/* ZIP Code with Smart Lookup */}
                 <div>
-                  <label htmlFor="zip_code" className="block text-sm font-medium text-gray-700">
-                    ZIP Code <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="zip_code" className="block text-sm font-medium text-gray-700">
+                      ZIP / Postal <span className="text-red-500">*</span>
+                    </label>
+                    {isLookingUpZip && (
+                      <span className="text-[10px] text-primary animate-pulse font-medium">Looking up...</span>
+                    )}
+                  </div>
                   <div className="mt-1">
                     <input
                       id="zip_code"
                       name="zip_code"
                       type="text"
                       value={signupData.zip_code}
-                      onChange={handleSignupChange}
+                      onChange={handleZipCodeChange}
                       onBlur={() => handleBlur('zip_code')}
                       placeholder="94102"
                       className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
@@ -909,33 +1091,70 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBackToLanding }) => {
                       }`}
                     />
                   </div>
+                  {zipLookupStatus && (
+                    <p className="mt-1 text-[11px] text-emerald-600 font-semibold">{zipLookupStatus}</p>
+                  )}
                   {touched.zip_code && errors.zip_code && (
                     <p className="mt-1 text-xs text-red-600">{errors.zip_code}</p>
                   )}
                 </div>
               </div>
 
-              {/* Street Address */}
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                  Street Address <span className="text-red-500">*</span>
-                </label>
-                <div className="mt-1">
+              {/* Street Address with Real-Time Address Autocomplete API */}
+              <div className="relative" ref={addressRef}>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                    Street Address <span className="text-red-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-gray-400">
+                    {isLoadingAddress ? 'Searching address...' : 'Type for verified address lookup'}
+                  </span>
+                </div>
+                <div className="mt-1 relative">
                   <input
                     id="address"
                     name="address"
                     type="text"
                     value={signupData.address}
-                    onChange={handleSignupChange}
+                    onChange={handleAddressInputChange}
+                    onFocus={() => {
+                      if (signupData.address.trim().length >= 3 && addressSuggestions.length > 0) {
+                        setIsAddressOpen(true);
+                      }
+                    }}
                     onBlur={() => handleBlur('address')}
-                    placeholder="123 Luxury Lane, Suite 400"
+                    placeholder="e.g. 123 Main Street, Suite 100"
                     className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
                       touched.address && errors.address
                         ? 'border-red-400 bg-red-50/30 focus:ring-2 focus:ring-red-400'
                         : 'border-gray-300 focus:ring-2 focus:ring-primary focus:border-transparent'
                     }`}
                   />
+                  {isLoadingAddress && (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  )}
                 </div>
+
+                {/* Verified Address Autocomplete Suggestions Dropdown */}
+                {isAddressOpen && addressSuggestions.length > 0 && (
+                  <div className="absolute z-50 mt-1 w-full bg-white shadow-2xl max-h-60 rounded-xl py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm border border-gray-100 divide-y divide-gray-50">
+                    <div className="px-3 py-1.5 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                      Verified Address Matches (Click to auto-fill)
+                    </div>
+                    {addressSuggestions.map((s, idx) => (
+                      <div
+                        key={idx}
+                        onMouseDown={() => handleSelectAddressSuggestion(s)}
+                        className="cursor-pointer select-none py-2.5 px-3.5 hover:bg-gray-50 flex flex-col transition-colors"
+                      >
+                        <span className="font-semibold text-gray-900 text-sm">{s.street}</span>
+                        <span className="text-xs text-gray-500 truncate">{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {touched.address && errors.address && (
                   <p className="mt-1 text-xs text-red-600">{errors.address}</p>
                 )}
