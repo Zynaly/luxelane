@@ -13,6 +13,10 @@ import ProductManagementPage from './views/admin/pages/ProductManagementPage';
 import OrderManagementPage from './views/admin/pages/OrderManagementPage';
 import CustomerManagementPage from './views/admin/pages/CustomerManagementPage';
 import WarehouseManagementPage from './views/admin/pages/WarehouseManagementPage';
+import VendorManagementPage from './views/admin/pages/VendorManagementPage';
+import CommissionManagementPage from './views/admin/pages/CommissionManagementPage';
+import VendorDashboard from './views/vendor/VendorDashboard';
+import VendorStorefrontPage from './views/customer/pages/VendorStorefrontPage';
 
 import { User } from './types';
 import { mockUser, mockAdminUser } from './data/mockData';
@@ -22,7 +26,7 @@ import API, { TokenService } from './services/api';
 const CartPagePlaceholder: React.FC = () => <div className="p-8 text-center text-2xl font-serif">Shopping Cart Page</div>;
 
 type CustomerPage = 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account';
-type AdminPage = 'dashboard' | 'products' | 'orders' | 'customers' | 'warehouse';
+type AdminPage = 'dashboard' | 'products' | 'orders' | 'customers' | 'vendors' | 'commissions' | 'warehouse';
 
 const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () => void }> = ({ onNavigate, onLogout }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -186,6 +190,8 @@ const AdminSidebar: React.FC<{ currentPage: AdminPage; onNavigate: (page: AdminP
                 <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('products'); }} className={navItemClasses('products')}><Icon name="products" className="w-5 h-5 mr-3" /> Products</a>
                 <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('orders'); }} className={navItemClasses('orders')}><Icon name="orders" className="w-5 h-5 mr-3" /> Orders</a>
                 <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('customers'); }} className={navItemClasses('customers')}><Icon name="customers" className="w-5 h-5 mr-3" /> Customers</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('vendors'); }} className={navItemClasses('vendors')}><Icon name="users" className="w-5 h-5 mr-3" /> Vendors & KYC</a>
+                <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('commissions'); }} className={navItemClasses('commissions')}><Icon name="cart" className="w-5 h-5 mr-3" /> Commission Rules</a>
                 <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('warehouse'); }} className={navItemClasses('warehouse')}><Icon name="warehouse" className="w-5 h-5 mr-3" /> Warehouse</a>
             </nav>
             <div className="p-4 border-t border-gray-700">
@@ -256,6 +262,8 @@ const AdminView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       case 'products': return <ProductManagementPage />;
       case 'orders': return <OrderManagementPage />;
       case 'customers': return <CustomerManagementPage />;
+      case 'vendors': return <VendorManagementPage />;
+      case 'commissions': return <CommissionManagementPage />;
       case 'warehouse': return <WarehouseManagementPage />;
       default: return <AdminDashboard />;
     }
@@ -347,6 +355,7 @@ type AppView = 'landing' | 'auth' | 'authenticated';
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [view, setView] = useState<AppView>('landing');
+  const [storefrontSlug, setStorefrontSlug] = useState<string | null>(null);
   const [authOptions, setAuthOptions] = useState<{ mode?: 'login' | 'signup'; role?: 'customer' | 'vendor' }>({
     mode: 'login',
     role: 'customer',
@@ -422,6 +431,11 @@ const App: React.FC = () => {
     document.body.className = user?.role === 'admin' ? 'bg-gray-100 font-sans' : 'bg-white font-sans';
   }, [user]);
 
+  // Show Public Vendor Storefront Preview if selected
+  if (storefrontSlug) {
+    return <VendorStorefrontPage slug={storefrontSlug} onBack={() => setStorefrontSlug(null)} />;
+  }
+
   // Show Landing Page
   if (view === 'landing') {
     return <LandingPage onGetStarted={handleGetStarted} />;
@@ -445,7 +459,13 @@ const App: React.FC = () => {
       return <AdminView onLogout={handleLogout} />;
     }
     if (user.role === 'vendor') {
-      return <VendorPortalPlaceholder user={user} onLogout={handleLogout} />;
+      return (
+        <VendorDashboard
+          user={user}
+          onLogout={handleLogout}
+          onViewStorefront={(slug) => setStorefrontSlug(slug)}
+        />
+      );
     }
     return <CustomerView onLogout={handleLogout} />;
   }

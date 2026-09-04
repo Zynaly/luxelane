@@ -16,9 +16,21 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'notifications' | 'security'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'notifications' | 'security' | 'vendor_apply'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Vendor Application State
+  const [vendorApp, setVendorApp] = useState({
+    legal_name: '',
+    display_name: '',
+    description: '',
+    tax_id: '',
+    support_email: '',
+    support_phone: '',
+  });
+  const [vendorAppSubmitting, setVendorAppSubmitting] = useState(false);
+  const [vendorAppSubmitted, setVendorAppSubmitted] = useState(false);
 
   // Profile State
   const [profile, setProfile] = useState<{
@@ -98,6 +110,21 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
       setNotifications(notifs);
     } catch (err: any) {
       console.error('Failed to fetch notifications:', err);
+    }
+  };
+
+  const handleVendorApply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVendorAppSubmitting(true);
+    try {
+      await API.Vendor.apply(vendorApp);
+      setVendorAppSubmitted(true);
+      showMsg('Merchant application submitted successfully! Platform curation review is in progress.');
+      fetchProfile();
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to submit vendor application.', 'error');
+    } finally {
+      setVendorAppSubmitting(false);
     }
   };
 
@@ -359,6 +386,17 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
             >
               <Icon name="lock" className="w-5 h-5 mr-3" /> Security & 2FA
             </button>
+            {profile.role === 'customer' && (
+              <button
+                id="account-tab-vendor-apply"
+                onClick={() => setActiveTab('vendor_apply')}
+                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  activeTab === 'vendor_apply' ? 'bg-primary text-white' : 'text-amber-800 bg-amber-50/70 hover:bg-amber-100'
+                }`}
+              >
+                <Icon name="cart" className="w-5 h-5 mr-3 text-amber-600" /> Become a Vendor
+              </button>
+            )}
             <div className="pt-2 border-t border-gray-100 mt-2">
               <button
                 id="account-logout-btn"
@@ -659,6 +697,114 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* VENDOR APPLICATION TAB */}
+          {activeTab === 'vendor_apply' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex items-center space-x-3 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Icon name="cart" className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Partner With LuxeLane</h2>
+                  <p className="text-xs text-gray-500">Apply to become a verified luxury merchant on our marketplace.</p>
+                </div>
+              </div>
+
+              {vendorAppSubmitted ? (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 text-center space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <Icon name="check" className="w-6 h-6" />
+                  </div>
+                  <h3 className="font-bold text-emerald-900 text-lg">Application Submitted</h3>
+                  <p className="text-xs text-emerald-700 max-w-md mx-auto">
+                    Your vendor application has been received and is pending review by our platform curation team.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleVendorApply} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Display / Brand Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={vendorApp.display_name}
+                        onChange={e => setVendorApp({ ...vendorApp, display_name: e.target.value })}
+                        placeholder="e.g. Maison Aurelia"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Legal Registered Entity Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={vendorApp.legal_name}
+                        onChange={e => setVendorApp({ ...vendorApp, legal_name: e.target.value })}
+                        placeholder="e.g. Aurelia Fine Goods LLC"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Tax ID / EIN / VAT</label>
+                      <input
+                        type="text"
+                        value={vendorApp.tax_id}
+                        onChange={e => setVendorApp({ ...vendorApp, tax_id: e.target.value })}
+                        placeholder="XX-XXXXXXX"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Merchant Support Email</label>
+                      <input
+                        type="email"
+                        value={vendorApp.support_email}
+                        onChange={e => setVendorApp({ ...vendorApp, support_email: e.target.value })}
+                        placeholder="concierge@brand.com"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Merchant Support Phone</label>
+                      <input
+                        type="text"
+                        value={vendorApp.support_phone}
+                        onChange={e => setVendorApp({ ...vendorApp, support_phone: e.target.value })}
+                        placeholder="+1 (555) 000-0000"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Brand Description & Heritage</label>
+                    <textarea
+                      rows={3}
+                      value={vendorApp.description}
+                      onChange={e => setVendorApp({ ...vendorApp, description: e.target.value })}
+                      placeholder="Tell our curation committee about your brand, craftsmanship, and products..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={vendorAppSubmitting}
+                      className="bg-primary text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-hover transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {vendorAppSubmitting ? 'Submitting Application...' : 'Submit Merchant Application'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </main>

@@ -349,7 +349,186 @@ export const NotificationAPI = {
   },
 };
 
-// ── Admin APIs (Sprint 1 & 2) ────────────────────────────────────────────────
+// ── Vendor APIs (Sprint 3) ───────────────────────────────────────────────────
+export interface VendorProfile {
+  id?: string;
+  legal_name: string;
+  display_name: string;
+  slug?: string;
+  status?: 'pending' | 'active' | 'suspended' | 'rejected';
+  description?: string;
+  tax_id?: string;
+  support_email?: string;
+  support_phone?: string;
+  logo_url?: string;
+  banner_url?: string;
+  rejection_reason?: string;
+  rating_avg?: number;
+  total_ratings?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface VendorStaffMember {
+  id: string;
+  user: string;
+  user_email: string;
+  user_name: string;
+  staff_role: 'manager' | 'support' | 'fulfillment';
+  is_active: boolean;
+  created_at?: string;
+}
+
+export interface VendorDocItem {
+  id: string;
+  doc_type: 'business_registration' | 'tax_certificate' | 'id_proof' | 'bank_statement';
+  file_url: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewer_note?: string;
+  created_at?: string;
+}
+
+export interface VendorBankItem {
+  id: string;
+  account_holder: string;
+  bank_name: string;
+  account_number: string;
+  routing_number?: string;
+  account_type: 'checking' | 'savings';
+  is_primary: boolean;
+  created_at?: string;
+}
+
+export interface VendorPolicyData {
+  id?: string;
+  return_window_days: number;
+  return_policy_text: string;
+  shipping_policy_text: string;
+  cancellation_policy_text: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export const VendorAPI = {
+  apply: async (data: {
+    legal_name: string;
+    display_name: string;
+    description?: string;
+    tax_id?: string;
+    support_email?: string;
+    support_phone?: string;
+  }) => {
+    return apiRequest<{ detail: string; vendor_id: string; slug: string }>('/vendors/apply/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getStorefront: async (slug: string) => {
+    return apiRequest<VendorProfile>(`/vendors/${slug}/storefront/`, { method: 'GET' });
+  },
+
+  getMe: async (): Promise<VendorProfile> => {
+    return apiRequest<VendorProfile>('/vendors/me/', { method: 'GET' });
+  },
+
+  updateMe: async (data: Partial<VendorProfile>): Promise<VendorProfile> => {
+    return apiRequest<VendorProfile>('/vendors/me/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getStaff: async (): Promise<VendorStaffMember[]> => {
+    const res = await apiRequest<any>('/vendors/me/staff/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  addStaff: async (data: { user: string | number; staff_role: string }): Promise<VendorStaffMember> => {
+    return apiRequest<VendorStaffMember>('/vendors/me/staff/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateStaff: async (id: string, data: Partial<{ staff_role: string; is_active: boolean }>): Promise<VendorStaffMember> => {
+    return apiRequest<VendorStaffMember>(`/vendors/me/staff/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  removeStaff: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/vendors/me/staff/${id}/`, {
+      method: 'DELETE',
+    });
+  },
+
+  getBankAccounts: async (): Promise<VendorBankItem[]> => {
+    const res = await apiRequest<any>('/vendors/me/bank-accounts/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  addBankAccount: async (data: {
+    account_holder: string;
+    bank_name: string;
+    account_number: string;
+    routing_number?: string;
+    account_type?: 'checking' | 'savings';
+    is_primary?: boolean;
+  }): Promise<VendorBankItem> => {
+    return apiRequest<VendorBankItem>('/vendors/me/bank-accounts/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteBankAccount: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/vendors/me/bank-accounts/${id}/`, {
+      method: 'DELETE',
+    });
+  },
+
+  getDocuments: async (): Promise<VendorDocItem[]> => {
+    const res = await apiRequest<any>('/vendors/me/documents/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  uploadDocument: async (data: {
+    doc_type: string;
+    file_url: string;
+  }): Promise<VendorDocItem> => {
+    return apiRequest<VendorDocItem>('/vendors/me/documents/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getPolicy: async (): Promise<VendorPolicyData> => {
+    return apiRequest<VendorPolicyData>('/vendors/me/policy/', { method: 'GET' });
+  },
+
+  updatePolicy: async (data: Partial<VendorPolicyData>): Promise<VendorPolicyData> => {
+    return apiRequest<VendorPolicyData>('/vendors/me/policy/', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ── Admin APIs (Sprint 1, 2 & 3) ─────────────────────────────────────────────
+export interface CommissionRuleItem {
+  id?: string;
+  vendor?: string | null;
+  vendor_name?: string;
+  rate_pct: number | string;
+  effective_from: string;
+  effective_to?: string | null;
+  is_active: boolean;
+  note?: string;
+  created_at?: string;
+}
+
 export const AdminAPI = {
   getUsers: async (params: { role?: string; is_active?: boolean } = {}) => {
     const query = new URLSearchParams();
@@ -371,6 +550,73 @@ export const AdminAPI = {
       body: JSON.stringify({ is_active, reason }),
     });
   },
+
+  // Sprint 3 Admin Vendor Curation
+  getVendors: async (params: { status?: string; search?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+
+    const res = await apiRequest<any>(`/admin/vendors/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getVendorDetail: async (id: string) => {
+    return apiRequest<any>(`/admin/vendors/${id}/`, { method: 'GET' });
+  },
+
+  updateVendorStatus: async (
+    id: string,
+    data: { status: 'active' | 'suspended' | 'rejected'; rejection_reason?: string }
+  ) => {
+    return apiRequest<any>(`/admin/vendors/${id}/status/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  reviewVendorDocument: async (
+    vendorId: string,
+    docId: string,
+    data: { status: 'approved' | 'rejected'; reviewer_note?: string }
+  ) => {
+    return apiRequest<any>(`/admin/vendors/${vendorId}/documents/${docId}/review/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Sprint 3 Admin Commission Rules
+  getCommissionRules: async (params: { vendor?: string; is_active?: boolean } = {}) => {
+    const query = new URLSearchParams();
+    if (params.vendor) query.set('vendor', params.vendor);
+    if (params.is_active !== undefined) query.set('is_active', String(params.is_active));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+
+    const res = await apiRequest<any>(`/admin/commission-rules/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  createCommissionRule: async (data: Partial<CommissionRuleItem>) => {
+    return apiRequest<CommissionRuleItem>('/admin/commission-rules/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateCommissionRule: async (id: string, data: Partial<CommissionRuleItem>) => {
+    return apiRequest<CommissionRuleItem>(`/admin/commission-rules/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteCommissionRule: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/admin/commission-rules/${id}/`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // Default export
@@ -380,6 +626,7 @@ export default {
   Address: AddressAPI,
   Media: MediaAPI,
   Notification: NotificationAPI,
+  Vendor: VendorAPI,
   Admin: AdminAPI,
   Token: TokenService,
 };
