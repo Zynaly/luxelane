@@ -18,48 +18,31 @@ import {
   AddressSuggestion
 } from '../../services/addressLookupService';
 
-export type SignupRole = 'customer' | 'vendor' | 'supplier' | 'warehouse';
+export type SignupRole = 'customer' | 'vendor' | 'warehouse';
 
 interface LoginPageProps {
   onLogin: (role: 'customer' | 'admin' | 'vendor') => void;
   onBackToLanding?: () => void;
   initialMode?: 'login' | 'signup';
-  initialRole?: SignupRole;
+  initialRole?: 'customer' | 'vendor';
 }
-
-const SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/;
 
 const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   onBackToLanding,
   initialMode = 'login',
-  initialRole = 'customer',
+  initialRole,
 }) => {
   const [isLogin, setIsLogin] = useState(initialMode !== 'signup');
-  const [signupRole, setSignupRole] = useState<SignupRole>(initialRole || 'customer');
+  const [signupRole, setSignupRole] = useState<SignupRole>(
+    (initialRole as SignupRole) || 'customer'
+  );
   const [signupStep, setSignupStep] = useState<'select-role' | 'form'>(
     initialMode === 'signup' && initialRole ? 'form' : 'select-role'
   );
+
+  // Form Fields
   const [activeTab, setActiveTab] = useState<'customer' | 'admin'>('customer');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  // OTP Verification Modal state
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpDestination, setOtpDestination] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpVerifying, setOtpVerifying] = useState(false);
-  const [otpSuccess, setOtpSuccess] = useState('');
-  const [otpError, setOtpError] = useState('');
-  const [resendCooldown, setResendCooldown] = useState(0);
-
-  // Floating Toast Notification state
-  const [toast, setToast] = useState<{ type: 'error' | 'success' | 'info'; message: string } | null>(null);
-
-  // Password visibility toggle
-  const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -251,7 +234,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
         if (signupRole !== 'customer') {
           if (!value.trim()) {
             if (signupRole === 'warehouse') return 'Warehouse facility legal entity name is required';
-            if (signupRole === 'supplier') return 'Supplier business legal entity name is required';
             return 'Legal business entity name is required';
           }
           if (value.trim().length < 2) return 'Legal entity name must be at least 2 characters';
@@ -261,7 +243,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
         if (signupRole !== 'customer') {
           if (!value.trim()) {
             if (signupRole === 'warehouse') return 'Warehouse / Facility name is required';
-            if (signupRole === 'supplier') return 'Supplier / Brand name is required';
             return 'Store / Brand display name is required';
           }
           if (value.trim().length < 2) return 'Name must be at least 2 characters';
@@ -588,9 +569,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
           display_name: signupData.display_name,
         });
         const roleTitle =
-          signupRole === 'supplier'
-            ? 'Supplier Partner'
-            : signupRole === 'warehouse'
+          signupRole === 'warehouse'
             ? 'Warehouse Logistics Partner'
             : 'Vendor Partner';
 
@@ -910,38 +889,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
                 <Icon name="arrow-right" className="w-5 h-5 text-gray-400 group-hover:text-dark group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
               </button>
 
-              {/* Supplier Card (Red theme) */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSignupRole('supplier');
-                  setSignupStep('form');
-                  setError('');
-                  setSuccess('');
-                }}
-                className="w-full text-left p-5 rounded-2xl border-2 border-red-200 hover:border-red-600 bg-red-50/25 hover:bg-red-50/60 transition-all group flex items-center justify-between shadow-sm hover:shadow-md cursor-pointer"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-bold text-xl group-hover:scale-105 transition-transform shadow-sm">
-                    🏭
-                  </div>
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-serif font-bold text-lg text-red-950 group-hover:text-red-700">
-                        I AM A SUPPLIER
-                      </span>
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-red-100 text-red-800">
-                        Materials & B2B
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-600 mt-1">
-                      Supply precious gemstones, rare textiles, luxury hardware, or wholesale goods to top brands.
-                    </p>
-                  </div>
-                </div>
-                <Icon name="arrow-right" className="w-5 h-5 text-red-400 group-hover:text-red-700 group-hover:translate-x-1 transition-all flex-shrink-0 ml-2" />
-              </button>
-
               {/* Vendor Card (Blue theme) */}
               <button
                 type="button"
@@ -1034,8 +981,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
             <p className="mt-2 text-sm text-gray-600">
               {isLogin
                 ? 'Sign in to access your luxury shopping experience or merchant portal'
-                : signupRole === 'supplier'
-                ? 'Register your enterprise to supply verified luxury brands on LuxeLane'
                 : signupRole === 'warehouse'
                 ? 'Partner with LuxeLane to provide bonded storage and logistics fulfillment'
                 : signupRole === 'vendor'
@@ -1213,18 +1158,14 @@ const LoginPage: React.FC<LoginPageProps> = ({
                       <span className="text-xs text-gray-400">Role:</span>
                       <span
                         className={`text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                          signupRole === 'supplier'
-                            ? 'bg-red-100 text-red-800 border border-red-200'
-                            : signupRole === 'vendor'
+                          signupRole === 'vendor'
                             ? 'bg-sky-100 text-sky-800 border border-sky-200'
                             : signupRole === 'warehouse'
                             ? 'bg-amber-100 text-amber-900 border border-amber-200'
                             : 'bg-gray-100 text-gray-800 border border-gray-200'
                         }`}
                       >
-                        {signupRole === 'supplier'
-                          ? 'Supplier Partner'
-                          : signupRole === 'vendor'
+                        {signupRole === 'vendor'
                           ? 'Vendor Partner'
                           : signupRole === 'warehouse'
                           ? 'Warehouse Logistics'
@@ -1237,9 +1178,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
                   {signupRole !== 'customer' && (
                     <div
                       className={`p-3.5 border rounded-xl mb-4 text-left ${
-                        signupRole === 'supplier'
-                          ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-200/70 text-red-950'
-                          : signupRole === 'vendor'
+                        signupRole === 'vendor'
                           ? 'bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-200/70 text-sky-950'
                           : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200/70 text-amber-950'
                       }`}
@@ -1248,35 +1187,27 @@ const LoginPage: React.FC<LoginPageProps> = ({
                         <span className="flex h-2 w-2 relative">
                           <span
                             className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                              signupRole === 'supplier'
-                                ? 'bg-red-400'
-                                : signupRole === 'vendor'
+                              signupRole === 'vendor'
                                 ? 'bg-sky-400'
                                 : 'bg-amber-400'
                             }`}
                           ></span>
                           <span
                             className={`relative inline-flex rounded-full h-2 w-2 ${
-                              signupRole === 'supplier'
-                                ? 'bg-red-600'
-                                : signupRole === 'vendor'
+                              signupRole === 'vendor'
                                 ? 'bg-sky-600'
                                 : 'bg-amber-600'
                             }`}
                           ></span>
                         </span>
                         <span className="text-xs font-bold uppercase tracking-wider">
-                          {signupRole === 'supplier'
-                            ? 'Supplier Partnership Application'
-                            : signupRole === 'vendor'
+                          {signupRole === 'vendor'
                             ? 'Merchant Brand Application'
                             : 'Logistics & Vault Application'}
                         </span>
                       </div>
                       <p className="mt-1 text-xs opacity-90 leading-relaxed">
-                        {signupRole === 'supplier'
-                          ? 'Register your enterprise to supply fine materials or wholesale collections. Upon verification, your application will be reviewed by procurement.'
-                          : signupRole === 'vendor'
+                        {signupRole === 'vendor'
                           ? 'Register your luxury brand to sell to our exclusive clientele. Upon verification, your store profile will be vetted by our curation board.'
                           : 'Register your secure storage or fulfillment facility. Upon verification, our logistics board will review your facility credentials.'}
                       </p>
@@ -1292,8 +1223,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
                           <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
                             {signupRole === 'warehouse'
                               ? 'Warehouse / Facility Name'
-                              : signupRole === 'supplier'
-                              ? 'Supplier / Brand Trade Name'
                               : 'Store / Brand Name'}{' '}
                             <span className="text-red-500">*</span>
                           </label>
@@ -1310,8 +1239,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
                             placeholder={
                               signupRole === 'warehouse'
                                 ? 'e.g. LuxeLane Bonded Vault NYC'
-                                : signupRole === 'supplier'
-                                ? 'e.g. Geneva Precision Horology'
                                 : 'e.g. Aurelia Fine Jewelry'
                             }
                             className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
@@ -1340,8 +1267,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
                           <label htmlFor="legal_name" className="block text-sm font-medium text-gray-700">
                             {signupRole === 'warehouse'
                               ? 'Operating Company Legal Name'
-                              : signupRole === 'supplier'
-                              ? 'Corporate Legal Entity Name'
                               : 'Legal Entity Name'}{' '}
                             <span className="text-red-500">*</span>
                           </label>
@@ -1358,8 +1283,6 @@ const LoginPage: React.FC<LoginPageProps> = ({
                             placeholder={
                               signupRole === 'warehouse'
                                 ? 'e.g. Metropolitan Secure Vaults LLC'
-                                : signupRole === 'supplier'
-                                ? 'e.g. Geneva Precision Horology SA'
                                 : 'e.g. Aurelia Luxury Holdings LLC'
                             }
                             className={`appearance-none block w-full px-3.5 py-2 border rounded-lg shadow-sm text-sm focus:outline-none transition-colors ${
