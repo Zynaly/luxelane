@@ -522,7 +522,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
 
         const role = response.user.role;
         let userRole: 'customer' | 'admin' | 'vendor' = 'customer';
-        if (role && (role === 'vendor_owner' || role === 'vendor_staff')) {
+        if (role && (role === 'vendor_owner' || role === 'vendor_staff' || role === 'warehouse_manager' || role === 'warehouse_staff')) {
           userRole = 'vendor';
         } else if (role && role.includes('admin')) {
           userRole = 'admin';

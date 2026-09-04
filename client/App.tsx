@@ -336,7 +336,7 @@ const App: React.FC = () => {
     const savedUser = TokenService.getUser();
     if (token && savedUser) {
       let role: 'customer' | 'admin' | 'vendor' = 'customer';
-      if (savedUser.role && (savedUser.role === 'vendor_owner' || savedUser.role === 'vendor_staff')) {
+      if (savedUser.role && (savedUser.role === 'vendor_owner' || savedUser.role === 'vendor_staff' || savedUser.role.includes('warehouse'))) {
         role = 'vendor';
       } else if (savedUser.role && savedUser.role.includes('admin')) {
         role = 'admin';
