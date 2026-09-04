@@ -22,7 +22,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'customer' | 'admin';
+  role: 'customer' | 'admin' | 'vendor';
   profilePictureUrl: string;
   addresses: Address[];
   paymentMethods: PaymentMethod[];

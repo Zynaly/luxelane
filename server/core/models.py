@@ -51,7 +51,7 @@ class AuditLog(models.Model):
         related_name="audit_logs",
         db_index=True,
     )
-    action = models.CharField(max_length=100, db_index=True)  # e.g. "vendor.approved"
+    action = models.CharField(max_length=200, db_index=True)  # e.g. "vendor.approved" or "PATCH:/api/v1/..."
     target_model = models.CharField(max_length=100)
     target_id = models.UUIDField(null=True)
     before = models.JSONField(null=True)

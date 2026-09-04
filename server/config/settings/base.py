@@ -8,7 +8,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # server/
 
 env = environ.Env(DEBUG=(bool, False))
-environ.Env.read_env(BASE_DIR / ".env")
+environ.Env.read_env(BASE_DIR / ".env", overwrite=True)
 
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
@@ -40,15 +40,16 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "core",
     "accounts",
+    "notifications",
+    # Sprint 3:
+    "vendors",
     # Added sprint-by-sprint:
-    # "vendors",
     # "catalog",
     # "warehouse",
     # "cart_and_pricing",
     # "orders",
     # "payments",
     # "shipping",
-    # "notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -180,6 +181,10 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
     "SORT_OPERATIONS": False,
     "ENUM_GENERATE_CHOICE_DESCRIPTION": True,
+    "ENUM_NAME_OVERRIDES": {
+        "OTPPurposeEnum": "accounts.models.OTPPurpose",
+        "PresignedUploadPurposeEnum": "core.serializers.PresignedUploadPurpose",
+    },
     "CONTACT": {"name": "LuxeLane Engineering"},
 }
 
@@ -217,3 +222,14 @@ STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
 # ── EasyPost / Shippo ─────────────────────────────────────────────────────────
 EASYPOST_API_KEY = env("EASYPOST_API_KEY", default="")
 SHIPPO_API_KEY = env("SHIPPO_API_KEY", default="")
+
+# ── Email Configuration ───────────────────────────────────────────────────────
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="LuxeLane <noreply@luxelane.com>")
+

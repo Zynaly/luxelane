@@ -2,7 +2,7 @@ import React from 'react';
 import { Icon } from '../components/Icon';
 
 interface LandingPageProps {
-  onGetStarted: () => void;
+  onGetStarted: (options?: { mode?: 'login' | 'signup'; role?: 'customer' | 'vendor' }) => void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
@@ -15,10 +15,16 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <div className="flex items-center">
               <span className="text-3xl font-serif font-bold text-dark">LuxeLane</span>
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <button
-                onClick={onGetStarted}
-                className="bg-dark text-white px-6 py-2 rounded-full font-medium hover:bg-gray-800 transition-colors"
+                onClick={() => onGetStarted({ mode: 'signup', role: 'vendor' })}
+                className="hidden sm:inline-flex items-center px-4 py-2 border border-gray-300 rounded-full text-xs font-semibold text-gray-700 hover:text-dark hover:border-gray-400 transition-colors"
+              >
+                Sell with Us
+              </button>
+              <button
+                onClick={() => onGetStarted({ mode: 'login' })}
+                className="bg-dark text-white px-6 py-2 rounded-full font-medium hover:bg-gray-800 transition-colors text-sm"
               >
                 Sign In
               </button>
@@ -46,7 +52,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
               <div className="flex flex-col sm:flex-row gap-4">
                 <button
-                  onClick={onGetStarted}
+                  onClick={() => onGetStarted({ mode: 'signup' })}
                   className="bg-accent text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-accent-hover transition-all transform hover:scale-105 shadow-lg"
                 >
                   Get Started
@@ -216,6 +222,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                 <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
                 <li><a href="#" className="hover:text-white transition-colors">FAQs</a></li>
+                <li>
+                  <button
+                    onClick={() => onGetStarted({ mode: 'signup', role: 'vendor' })}
+                    className="hover:text-white transition-colors text-accent font-medium"
+                  >
+                    Sell with Us (Vendor Partner) →
+                  </button>
+                </li>
               </ul>
             </div>
             <div>
