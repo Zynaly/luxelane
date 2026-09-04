@@ -1,10 +1,39 @@
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import ReadOnlyPasswordHashField
 from accounts.models import User, OTPVerification, SocialAccount, Address, LedgerAccount, LedgerEntry
+
+
+class CustomUserCreationForm(forms.ModelForm):
+    password = forms.CharField(label="Password", widget=forms.PasswordInput)
+
+    class Meta:
+        model = User
+        fields = ("email", "phone", "first_name", "last_name", "role", "password")
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        user.set_password(self.cleaned_data["password"])
+        if commit:
+            user.save()
+        return user
+
+
+class CustomUserChangeForm(forms.ModelForm):
+    password = ReadOnlyPasswordHashField(
+        help_text="Raw passwords are not stored, so there is no way to see this user's password."
+    )
+
+    class Meta:
+        model = User
+        fields = "__all__"
 
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
+    form = CustomUserChangeForm
+    add_form = CustomUserCreationForm
     list_display = ("email", "phone", "role", "is_verified", "is_active", "is_staff", "created_at")
     list_filter = ("role", "is_verified", "is_active", "is_staff")
     search_fields = ("email", "phone", "first_name", "last_name")
@@ -14,6 +43,12 @@ class UserAdmin(BaseUserAdmin):
         ("Personal info", {"fields": ("first_name", "last_name", "avatar_url")}),
         ("Permissions & Roles", {"fields": ("role", "is_verified", "two_factor_enabled", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Important dates", {"fields": ("last_login", "last_login_at")}),
+    )
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("email", "phone", "first_name", "last_name", "role", "password"),
+        }),
     )
 
 
