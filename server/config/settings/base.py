@@ -221,3 +221,7 @@ STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
 # ── EasyPost / Shippo ─────────────────────────────────────────────────────────
 EASYPOST_API_KEY = env("EASYPOST_API_KEY", default="")
 SHIPPO_API_KEY = env("SHIPPO_API_KEY", default="")
+
+# ── Email Defaults ────────────────────────────────────────────────────────────
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@luxelane.com")
+
