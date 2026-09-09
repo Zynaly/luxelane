@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import API, { Cart, CartItem, Coupon, CartValidationResult, RateQuote } from '../../../services/api';
+import API, { Cart, CartItem, Coupon, CartValidationResult, RateQuote, Order } from '../../../services/api';
 import { Icon } from '../../../components/Icon';
 
 interface CartPageProps {
@@ -24,6 +24,23 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
   const [shippingLoading, setShippingLoading] = useState(false);
   const [destCountry, setDestCountry] = useState('US');
   const [destPostalCode, setDestPostalCode] = useState('10001');
+
+  // Sprint 10: Checkout & Order Placement State
+  const [checkoutStep, setCheckoutStep] = useState<'form' | 'processing' | 'confirmed'>('form');
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [placedOrder, setPlacedOrder] = useState<any | null>(null);
+  const [checkoutForm, setCheckoutForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    line1: '740 Park Avenue',
+    line2: 'Suite 12B',
+    city: 'New York',
+    state: 'NY',
+    postal_code: '10021',
+    country: 'US',
+    payment_method: 'card',
+  });
 
   const fetchCart = useCallback(async () => {
     try {
@@ -162,6 +179,79 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
       });
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  useEffect(() => {
+    // Attempt to prefill user info if authenticated
+    try {
+      const token = API.Token.getToken();
+      if (token) {
+        API.Profile.getProfile().then((p: any) => {
+          if (p?.email) {
+            setCheckoutForm((prev) => ({
+              ...prev,
+              email: p.email || '',
+              name: `${p.first_name || ''} ${p.last_name || ''}`.trim(),
+              phone: p.phone || '',
+            }));
+          }
+        }).catch(() => {});
+      }
+    } catch {
+      // Guest fallback
+    }
+  }, []);
+
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cart || !selectedShippingQuote) {
+      setOrderError('A delivery courier quote must be selected.');
+      return;
+    }
+    if (!checkoutForm.email) {
+      setOrderError('Email address is required for order confirmation and tracking.');
+      return;
+    }
+    if (!checkoutForm.line1 || !checkoutForm.city || !checkoutForm.postal_code) {
+      setOrderError('Please provide a complete shipping street address.');
+      return;
+    }
+
+    setOrderError(null);
+    setCheckoutStep('processing');
+
+    try {
+      const idempotencyKey = `lux-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const res = await API.Order.placeOrder({
+        cart_id: cart.id,
+        rate_quote_id: selectedShippingQuote.quote_id,
+        shipping_address_data: {
+          line1: checkoutForm.line1,
+          line2: checkoutForm.line2,
+          city: checkoutForm.city,
+          state: checkoutForm.state,
+          postal_code: checkoutForm.postal_code,
+          country: checkoutForm.country,
+        },
+        guest_email: checkoutForm.email,
+        guest_phone: checkoutForm.phone,
+        payment_method: checkoutForm.payment_method,
+        idempotency_key: idempotencyKey,
+      });
+
+      setPlacedOrder(res);
+      setCheckoutStep('confirmed');
+      onCartChange?.(0);
+      fetchCart();
+    } catch (err: any) {
+      console.error('Order orchestration error:', err);
+      let msg = 'Failed to process order. Please try again.';
+      if (typeof err === 'object') {
+        msg = err.error || err.cart || err.rate_quote_id || err.guest_email || err.message || JSON.stringify(err);
+      }
+      setOrderError(msg);
+      setCheckoutStep('form');
     }
   };
 
@@ -697,51 +787,315 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
           </div>
         )}
 
-        {/* Modal: Checkout Bridge (Preparing for Sprint 10) */}
+        {/* Modal: Sprint 10 Checkout & Order Orchestration */}
         {checkoutModalOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 sm:p-8 border border-stone-200">
-              <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mb-4">
-                <Icon name="check" className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-serif font-bold text-stone-900 mb-2">
-                Bag Verified & Locked for Checkout
-              </h3>
-              <p className="text-stone-600 text-sm mb-4 leading-relaxed">
-                Your luxury bag items and pricing of{' '}
-                <strong className="text-stone-900 font-mono">${dynamicGrandTotal}</strong> have been
-                validated against live atelier inventory, delivery logistics, and price protection rules.
-              </p>
-              <div className="bg-stone-50 rounded-xl p-4 border border-stone-200 mb-6 text-xs text-stone-600 space-y-1.5">
-                <div className="flex justify-between">
-                  <span>Session / Cart ID:</span>
-                  <span className="font-mono">{cart?.id}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Pieces Selected:</span>
-                  <span>{breakdown?.item_count} items</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Selected Courier:</span>
-                  <span className="font-semibold">{selectedShippingQuote ? `${selectedShippingQuote.carrier_name} (${selectedShippingQuote.service_level})` : 'Standard Delivery'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Rate Quote ID:</span>
-                  <span className="font-mono text-[11px]">{selectedShippingQuote?.quote_id || 'RQ-PENDING'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Applied Promotion:</span>
-                  <span>{cart?.applied_coupon_code || 'None'}</span>
-                </div>
-              </div>
-              <div className="flex space-x-3">
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 sm:p-8 border border-stone-200 relative my-8">
+              {/* Close Button */}
+              {checkoutStep !== 'processing' && (
                 <button
-                  onClick={() => setCheckoutModalOpen(false)}
-                  className="flex-1 py-3 px-4 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors"
+                  onClick={() => {
+                    setCheckoutModalOpen(false);
+                    if (checkoutStep === 'confirmed') {
+                      setCheckoutStep('form');
+                      setPlacedOrder(null);
+                    }
+                  }}
+                  className="absolute top-5 right-5 text-stone-400 hover:text-stone-700 transition-colors"
                 >
-                  Continue Shopping
+                  <Icon name="x" className="w-6 h-6" />
                 </button>
-              </div>
+              )}
+
+              {/* State 1: Confirmed State */}
+              {checkoutStep === 'confirmed' && placedOrder && (
+                <div className="text-center py-4">
+                  <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto mb-4">
+                    <Icon name="check" className="w-8 h-8" />
+                  </div>
+                  <span className="inline-block px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full uppercase tracking-wider mb-2">
+                    Payment Authorized & Order Confirmed
+                  </span>
+                  <h3 className="text-2xl font-serif font-bold text-stone-900 mb-2">
+                    Thank You for Your Patronage
+                  </h3>
+                  <p className="text-stone-600 text-sm mb-6 max-w-md mx-auto">
+                    Your luxury order has been locked and placed with our partner ateliers. A formal confirmation and receipt have been dispatched to <strong className="text-stone-900">{checkoutForm.email}</strong>.
+                  </p>
+
+                  <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 mb-6 text-left text-xs text-stone-600 space-y-2.5">
+                    <div className="flex justify-between items-center pb-2 border-b border-stone-200">
+                      <span className="font-medium text-stone-500">Order Reference</span>
+                      <span className="font-mono font-bold text-stone-900 text-sm">{placedOrder.order_number}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500">Invoice Number</span>
+                      <span className="font-mono text-stone-800">{placedOrder.invoice_number || 'INV-GENERATED'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500">Total Billed</span>
+                      <span className="font-mono font-bold text-stone-900 text-sm">${placedOrder.grand_total} {placedOrder.currency}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500">Delivery Courier</span>
+                      <span className="text-stone-800 font-medium">{selectedShippingQuote ? `${selectedShippingQuote.carrier_name} (${selectedShippingQuote.service_level})` : 'Standard Logistics'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500">Delivery Address</span>
+                      <span className="text-stone-800 text-right">{checkoutForm.line1}, {checkoutForm.city}, {checkoutForm.state} {checkoutForm.postal_code}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-stone-500">Atelier Packages</span>
+                      <span className="text-stone-800 font-semibold">{placedOrder.vendor_orders_count || 1} vendor package(s)</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={() => {
+                        setCheckoutModalOpen(false);
+                        setCheckoutStep('form');
+                        setPlacedOrder(null);
+                        onNavigate?.('shop');
+                      }}
+                      className="flex-1 py-3 px-6 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shadow"
+                    >
+                      Continue Shopping
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCheckoutModalOpen(false);
+                        onNavigate?.('account');
+                      }}
+                      className="flex-1 py-3 px-6 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all border border-stone-300"
+                    >
+                      View in My Account
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* State 2: Processing State */}
+              {checkoutStep === 'processing' && (
+                <div className="text-center py-12 space-y-4">
+                  <div className="w-16 h-16 border-4 border-amber-200 border-t-amber-700 rounded-full animate-spin mx-auto" />
+                  <h3 className="text-xl font-serif font-bold text-stone-900">
+                    Authorizing Checkout & Reserving Atelier Pieces
+                  </h3>
+                  <p className="text-stone-500 text-xs max-w-sm mx-auto leading-relaxed">
+                    Executing atomic hold on atelier inventory, locking live shipping rate quotes, and issuing platform invoices...
+                  </p>
+                </div>
+              )}
+
+              {/* State 3: Checkout Form */}
+              {checkoutStep === 'form' && (
+                <div>
+                  <div className="mb-6">
+                    <span className="text-xs font-mono uppercase tracking-widest text-amber-700 font-semibold">Sprint 10 Orchestration</span>
+                    <h3 className="text-2xl font-serif font-bold text-stone-900 mt-1">
+                      White-Glove Atelier Checkout
+                    </h3>
+                    <p className="text-stone-500 text-xs mt-1">
+                      Complete your delivery coordinates and authorize payment to reserve your curated pieces.
+                    </p>
+                  </div>
+
+                  {orderError && (
+                    <div className="mb-5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center space-x-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                      <span>{orderError}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handlePlaceOrder} className="space-y-5">
+                    {/* Contact details */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5">
+                        1. Client Contact Information
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-stone-500 mb-1">Email Address (for order receipts) *</label>
+                          <input
+                            type="email"
+                            required
+                            value={checkoutForm.email}
+                            onChange={(e) => setCheckoutForm({ ...checkoutForm, email: e.target.value })}
+                            placeholder="patron@luxelane.com"
+                            className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-stone-500 mb-1">Contact Phone</label>
+                          <input
+                            type="tel"
+                            value={checkoutForm.phone}
+                            onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
+                            placeholder="+1 (555) 019-2831"
+                            className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delivery Address */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5">
+                        2. Destination Coordinates
+                      </h4>
+                      <div className="space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] text-stone-500 mb-1">Street Address *</label>
+                            <input
+                              type="text"
+                              required
+                              value={checkoutForm.line1}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, line1: e.target.value })}
+                              placeholder="740 Park Avenue"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">Apt / Suite</label>
+                            <input
+                              type="text"
+                              value={checkoutForm.line2}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, line2: e.target.value })}
+                              placeholder="Penthouse B"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">City *</label>
+                            <input
+                              type="text"
+                              required
+                              value={checkoutForm.city}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">State / Province</label>
+                            <input
+                              type="text"
+                              value={checkoutForm.state}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, state: e.target.value })}
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">Postal / ZIP Code *</label>
+                            <input
+                              type="text"
+                              required
+                              value={checkoutForm.postal_code}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, postal_code: e.target.value })}
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delivery Quote Selector */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2">
+                        3. Selected Delivery Courier
+                      </h4>
+                      {shippingRates.length > 0 ? (
+                        <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                          {shippingRates.map((q) => (
+                            <label
+                              key={q.quote_id}
+                              className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
+                                selectedShippingQuote?.quote_id === q.quote_id
+                                  ? 'border-stone-900 bg-stone-50 font-medium'
+                                  : 'border-stone-200 hover:border-stone-300'
+                              }`}
+                            >
+                              <div className="flex items-center space-x-2.5">
+                                <input
+                                  type="radio"
+                                  name="shippingQuoteRadio"
+                                  checked={selectedShippingQuote?.quote_id === q.quote_id}
+                                  onChange={() => setSelectedShippingQuote(q)}
+                                  className="text-stone-900 focus:ring-stone-900"
+                                />
+                                <div>
+                                  <span className="font-semibold text-stone-900">{q.carrier_name}</span>
+                                  <span className="text-stone-500 ml-1.5 font-normal">({q.service_level})</span>
+                                  <span className="block text-[10px] text-stone-400 font-mono">{q.quote_id} · ~{q.estimated_days} business days</span>
+                                </div>
+                              </div>
+                              <span className="font-mono font-bold text-stone-900">${parseFloat(q.amount).toFixed(2)}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-stone-500 italic">No real-time quotes found; please verify address.</p>
+                      )}
+                    </div>
+
+                    {/* Payment Authorization Simulation */}
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2">
+                        4. Payment Method
+                      </h4>
+                      <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between text-xs">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-9 h-6 rounded bg-stone-900 text-amber-300 flex items-center justify-center text-[9px] font-mono font-bold tracking-wider">
+                            LUXE
+                          </div>
+                          <div>
+                            <span className="font-semibold text-stone-900">FakeGateway Simulation (Instant Settle)</span>
+                            <span className="block text-[10px] text-stone-500">•••• •••• •••• 4242 · Exp 12/28</span>
+                          </div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-semibold uppercase">
+                          Sandbox Active
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Order Total & Submit */}
+                    <div className="pt-3 border-t border-stone-200">
+                      <div className="flex justify-between items-baseline mb-4">
+                        <span className="text-sm font-semibold text-stone-900">Grand Total Due</span>
+                        <div className="text-right">
+                          <span className="text-xl font-serif font-bold text-stone-900 font-mono">
+                            ${dynamicGrandTotal}
+                          </span>
+                          <span className="text-[10px] text-stone-400 block">Taxes, shipping, and packaging included</span>
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => setCheckoutModalOpen(false)}
+                          className="flex-1 py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={!selectedShippingQuote || items.length === 0}
+                          className="flex-[2] py-3 px-6 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shadow-md flex items-center justify-center space-x-2"
+                        >
+                          <span>Authorize & Place Order (${dynamicGrandTotal})</span>
+                          <Icon name="check" className="w-4 h-4 text-emerald-400" />
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -64,6 +64,8 @@ urlpatterns = [
     ),
     # Sprint 4 — Vendor products (lazy include to avoid circular imports)
     path("me/products/", include("catalog.urls_vendor")),
+    # Sprint 10 — Vendor orders
+    path("", include("orders.urls_vendor")),
 ]
 
 # ── Admin vendor routes (injected under /api/v1/admin/) ───────────────────────

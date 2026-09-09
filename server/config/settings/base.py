@@ -51,8 +51,9 @@ LOCAL_APPS = [
     "cart_and_pricing",
     # Sprint 9:
     "shipping",
+    # Sprint 10:
+    "orders",
     # Added sprint-by-sprint:
-    # "orders",
     # "payments",
 ]
 

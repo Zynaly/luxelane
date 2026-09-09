@@ -20,7 +20,6 @@
 | 6 | Warehouse & Inventory Core | 15 | ✅ Complete | ██████████ 100% |
 | 7 | Reservations, Allocation & Smart Routing | 2 | ✅ Complete | ██████████ 100% |
 | 8 | Cart, Pricing & Promotions | 12 | ✅ Complete | ██████████ 100% |
-
 | 9 | Shipping Rates & Packing | 4 | ✅ Complete | ██████████ 100% |
 | 10 | Orders & Checkout Orchestration | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 11 | Online Payments & Webhooks | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -280,22 +279,22 @@
 
 ### Tasks
 
-- [ ] **S10-T1** Create `orders` app
-- [ ] **S10-T2** `Order`, `VendorOrder`, `OrderItem` models with status FSMs
-- [ ] **S10-T3** `OrderStatusHistory`, `Cancellation`, `Invoice` models
-- [ ] **S10-T4** `IdempotencyKey`, `OutboxEvent` models
-- [ ] **S10-T5** Migrations
-- [ ] **S10-T6** `PlaceOrderView` — full orchestration (idempotency → validate → rate quote → price → allocate → reserve → create Order tree → PaymentAttempt → OutboxEvent)
-- [ ] **S10-T7** `OrderViewSet` — customer list/retrieve (owner-scoped)
-- [ ] **S10-T8** `OrderCancelView` + `OrderItemCancelView`
-- [ ] **S10-T9** `InvoiceView` — PDF URL (Celery-generated post-order)
-- [ ] **S10-T10** `OrderTrackView` — public guest lookup by order_number + email/phone
-- [ ] **S10-T11** `VendorMyOrdersViewSet` — VendorOrder rows scoped to vendor
-- [ ] **S10-T12** `WarehouseOrdersViewSet` — OrderItems allocated to warehouse (picking queue)
-- [ ] **S10-T13** `AdminOrderViewSet`
-- [ ] **S10-T14** Wire all Sprint 10 URLs
+- [x] **S10-T1** Create `orders` app
+- [x] **S10-T2** `Order`, `VendorOrder`, `OrderItem` models with status FSMs
+- [x] **S10-T3** `OrderStatusHistory`, `Cancellation`, `Invoice` models
+- [x] **S10-T4** `IdempotencyKey`, `OutboxEvent` models
+- [x] **S10-T5** Migrations
+- [x] **S10-T6** `PlaceOrderView` — full orchestration (idempotency → validate → rate quote → price → allocate → reserve → create Order tree → PaymentAttempt → OutboxEvent)
+- [x] **S10-T7** `OrderViewSet` — customer list/retrieve (owner-scoped)
+- [x] **S10-T8** `OrderCancelView` + `OrderItemCancelView`
+- [x] **S10-T9** `InvoiceView` — PDF URL (Celery-generated post-order)
+- [x] **S10-T10** `OrderTrackView` — public guest lookup by order_number + email/phone
+- [x] **S10-T11** `VendorMyOrdersViewSet` — VendorOrder rows scoped to vendor
+- [x] **S10-T12** `WarehouseOrdersViewSet` — OrderItems allocated to warehouse (picking queue)
+- [x] **S10-T13** `AdminOrderViewSet`
+- [x] **S10-T14** Wire all Sprint 10 URLs
 
-**S10 Status: ⏳ Pending**
+**S10 Status: ✅ Complete** — 6/6 orders unit tests passing · 146/146 project tests passing · Client OrderAPI, CartPage checkout flow, & AccountPage order history integrated
 
 ---
 

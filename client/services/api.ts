@@ -1661,6 +1661,216 @@ export const ShippingAPI = {
   },
 };
 
+// ── Order APIs (Sprint 10) ───────────────────────────────────────────────────
+export interface OrderItem {
+  id: string;
+  vendor_order: string;
+  variant: string;
+  sku: string;
+  product_title: string;
+  variant_name: string;
+  quantity: number;
+  unit_price: string;
+  line_subtotal: string;
+  tax_amount: string;
+  total_amount: string;
+  allocated_warehouse?: string | null;
+  allocated_warehouse_name?: string;
+  fulfilment_status: 'pending' | 'allocated' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  tracking_number?: string;
+  cancelled_at?: string | null;
+  cancellation_reason?: string;
+}
+
+export interface VendorOrder {
+  id: string;
+  order: string;
+  vendor: string;
+  vendor_name: string;
+  subtotal: string;
+  shipping_amount: string;
+  commission_amount: string;
+  commission_rate_snapshot: string;
+  net_payout: string;
+  status: 'pending' | 'acknowledged' | 'processing' | 'partially_shipped' | 'shipped' | 'delivered' | 'cancelled';
+  carrier?: string | null;
+  tracking_number?: string;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  cancelled_at?: string | null;
+  items?: OrderItem[];
+  created_at: string;
+}
+
+export interface OrderStatusHistory {
+  id: string;
+  from_status: string;
+  to_status: string;
+  reason?: string;
+  created_at: string;
+}
+
+export interface Invoice {
+  id: string;
+  order: string;
+  invoice_number: string;
+  issued_at: string;
+  subtotal: string;
+  tax_total: string;
+  shipping_total: string;
+  discount_total: string;
+  grand_total: string;
+  currency: string;
+  pdf_url?: string;
+  is_paid: boolean;
+}
+
+export interface Order {
+  id: string;
+  order_number: string;
+  customer?: string | null;
+  shipping_address_snapshot: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+  };
+  billing_address_snapshot: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postal_code?: string;
+  };
+  currency: string;
+  subtotal: string;
+  discount_total: string;
+  shipping_total: string;
+  tax_total: string;
+  grand_total: string;
+  status: 'pending_payment' | 'paid' | 'processing' | 'partially_fulfilled' | 'fulfilled' | 'cancelled' | 'return_requested' | 'refunded';
+  placed_at: string;
+  is_guest_order: boolean;
+  guest_email?: string;
+  guest_phone?: string;
+  vendor_orders?: VendorOrder[];
+  status_history?: OrderStatusHistory[];
+  invoice?: Invoice | null;
+}
+
+export interface PlaceOrderRequest {
+  cart_id?: string;
+  rate_quote_id: string;
+  shipping_address_id?: string;
+  billing_address_id?: string;
+  shipping_address_data?: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    country?: string;
+    postal_code: string;
+  };
+  billing_address_data?: {
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    country?: string;
+    postal_code: string;
+  };
+  guest_email?: string;
+  guest_phone?: string;
+  payment_method?: string;
+  payment_token?: string;
+  idempotency_key?: string;
+}
+
+export interface OrderTrackRequest {
+  order_number: string;
+  email: string;
+}
+
+export const OrderAPI = {
+  placeOrder: async (data: PlaceOrderRequest): Promise<{
+    order_id: string;
+    order_number: string;
+    status: string;
+    grand_total: string;
+    currency: string;
+    payment_status: string;
+    payment_reference?: string;
+    invoice_number?: string;
+    vendor_orders_count?: number;
+    placed_at: string;
+  }> => {
+    const headers: Record<string, string> = {};
+    if (data.idempotency_key) {
+      headers['Idempotency-Key'] = data.idempotency_key;
+    }
+    return apiRequest<any>('/checkout/place-order/', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data),
+    });
+  },
+
+  list: async (params: { status?: string; page?: number } = {}): Promise<Order[]> => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.page) query.set('page', String(params.page));
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/orders/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  get: async (id: string): Promise<Order> => {
+    return apiRequest<Order>(`/orders/${id}/`, { method: 'GET' });
+  },
+
+  cancel: async (id: string, reason: string): Promise<Order> => {
+    return apiRequest<Order>(`/orders/${id}/cancel/`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  cancelItem: async (orderId: string, itemId: string, reason: string): Promise<any> => {
+    return apiRequest<any>(`/orders/${orderId}/items/${itemId}/cancel/`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getInvoice: async (id: string): Promise<Invoice> => {
+    return apiRequest<Invoice>(`/orders/${id}/invoice/`, { method: 'GET' });
+  },
+
+  track: async (data: OrderTrackRequest): Promise<Order> => {
+    return apiRequest<Order>('/orders/track/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  vendorOrders: async (): Promise<VendorOrder[]> => {
+    const res = await apiRequest<any>('/vendors/me/orders/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  adminOrders: async (params: { status?: string; search?: string } = {}): Promise<Order[]> => {
+    const query = new URLSearchParams();
+    if (params.status) query.set('status', params.status);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/orders/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1686,6 +1896,7 @@ export default {
   Coupon: CouponAPI,
   Tax: TaxAPI,
   Shipping: ShippingAPI,
+  Order: OrderAPI,
   Token: TokenService,
 };
 

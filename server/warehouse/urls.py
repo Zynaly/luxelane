@@ -21,6 +21,9 @@ from warehouse.views import (
 )
 
 
+from orders.views import WarehouseOrdersViewSet
+
+
 # ── Warehouse router ──────────────────────────────────────────────────────────
 warehouse_router = DefaultRouter()
 warehouse_router.register(r"", WarehouseViewSet, basename="warehouse")
@@ -28,6 +31,7 @@ warehouse_router.register(r"", WarehouseViewSet, basename="warehouse")
 # ── Nested sub-endpoints under /warehouses/{id}/ ──────────────────────────────
 warehouse_urlpatterns = [
     path("<uuid:warehouse_id>/inventory/", WarehouseInventoryViewSet.as_view({"get": "list"}), name="warehouse-inventory-list"),
+    path("<uuid:warehouse_id>/orders/", WarehouseOrdersViewSet.as_view({"get": "list"}), name="warehouse-orders-queue"),
     path("<uuid:warehouse_id>/staff/", WarehouseStaffViewSet.as_view({"get": "list", "post": "create"}), name="warehouse-staff-list"),
     path("<uuid:warehouse_id>/staff/<uuid:pk>/", WarehouseStaffViewSet.as_view({"get": "retrieve", "delete": "destroy"}), name="warehouse-staff-detail"),
     path("", include(warehouse_router.urls)),
