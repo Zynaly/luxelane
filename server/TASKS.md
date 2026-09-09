@@ -348,21 +348,21 @@
 
 ### Tasks
 
-- [ ] **S13-T1** `Shipment`, `ShipmentPackage`, `ShipmentItem` models
-- [ ] **S13-T2** `ShipmentTrackingEvent` (append-only) model
-- [ ] **S13-T3** Migrations
-- [ ] **S13-T4** `ShipmentViewSet` — vendor/warehouse create + list/retrieve
-- [ ] **S13-T5** `ShipmentLabelView` — redeem RateQuote → purchase label OR self-ship manual path
-- [ ] **S13-T6** `ShipmentCancelView` — void label if pre-pickup
-- [ ] **S13-T7** `ShipmentTrackView` — public by tracking_number
-- [ ] **S13-T8** `CarrierWebhookView` — store-raw → 200 → async → dedupe
-- [ ] **S13-T9** Webhook cascade: delivered → OrderItem → VendorOrder → Order → escrow.schedule_release()
-- [ ] **S13-T10** `ShipmentTrackingPollTask` — Celery beat backfill
-- [ ] **S13-T11** `VendorMyShipmentsViewSet`
-- [ ] **S13-T12** `warehouse.services.stock.consume_reservation()` — decrement on_hand + StockMovement
-- [ ] **S13-T13** Wire all Sprint 13 URLs
+- [x] **S13-T1** `Shipment`, `ShipmentPackage`, `ShipmentItem` models
+- [x] **S13-T2** `ShipmentTrackingEvent` (append-only) model
+- [x] **S13-T3** Migrations
+- [x] **S13-T4** `ShipmentViewSet` — vendor/warehouse create + list/retrieve
+- [x] **S13-T5** `ShipmentLabelView` — redeem RateQuote → purchase label OR self-ship manual path
+- [x] **S13-T6** `ShipmentCancelView` — void label if pre-pickup
+- [x] **S13-T7** `ShipmentTrackView` — public by tracking_number
+- [x] **S13-T8** `CarrierWebhookView` — store-raw → 200 → async → dedupe
+- [x] **S13-T9** Webhook cascade: delivered → OrderItem → VendorOrder → Order → escrow.schedule_release()
+- [x] **S13-T10** `ShipmentTrackingPollTask` — Celery beat backfill
+- [x] **S13-T11** `VendorMyShipmentsViewSet`
+- [x] **S13-T12** `warehouse.services.stock.consume_reservation()` — decrement on_hand + StockMovement
+- [x] **S13-T13** Wire all Sprint 13 URLs
 
-**S13 Status: ⏳ Pending**
+**S13 Status: ✅ Complete** — 15/15 shipping unit tests passing · 166/166 project tests passing · Frontend ShippingAPI integrated
 
 ---
 

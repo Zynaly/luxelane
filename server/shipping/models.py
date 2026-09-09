@@ -142,3 +142,166 @@ class RateQuote(BaseModel):
     @classmethod
     def generate_quote_id(cls, carrier_code: str) -> str:
         return f"rq_{carrier_code}_{uuid.uuid4().hex[:12]}"
+
+
+# ── Sprint 13 Models: Shipments, Packages, Items & Tracking ──────────────────
+
+class ShipmentStatus(models.TextChoices):
+    LABEL_CREATED = "label_created", "Label Created"
+    PICKED_UP = "picked_up", "Picked Up"
+    IN_TRANSIT = "in_transit", "In Transit"
+    OUT_FOR_DELIVERY = "out_for_delivery", "Out For Delivery"
+    DELIVERED = "delivered", "Delivered"
+    FAILED_ATTEMPT = "failed_attempt", "Failed Delivery Attempt"
+    EXCEPTION = "exception", "Delivery Exception"
+    CANCELLED = "cancelled", "Cancelled"
+    RETURNED = "returned", "Returned"
+
+
+class Shipment(BaseModel):
+    """
+    Physical shipment fulfilling one or more items of an Order / VendorOrder.
+    """
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="shipments",
+    )
+    vendor_order = models.ForeignKey(
+        "orders.VendorOrder",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="shipments",
+    )
+    warehouse = models.ForeignKey(
+        "warehouse.Warehouse",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shipments",
+    )
+    carrier = models.ForeignKey(
+        Carrier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shipments",
+    )
+    tracking_number = models.CharField(max_length=128, db_index=True)
+    tracking_url = models.URLField(blank=True, default="")
+    label_url = models.URLField(blank=True, default="")
+    label_format = models.CharField(max_length=20, default="PDF")
+    rate_quote = models.ForeignKey(
+        RateQuote,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shipments",
+    )
+    is_self_shipped = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=30,
+        choices=ShipmentStatus.choices,
+        default=ShipmentStatus.LABEL_CREATED,
+        db_index=True,
+    )
+    shipped_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Shipment"
+        verbose_name_plural = "Shipments"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Shipment {self.tracking_number} ({self.status}) [{self.order.order_number}]"
+
+
+class ShipmentPackage(BaseModel):
+    """
+    Physical parcel package container within a shipment.
+    """
+    shipment = models.ForeignKey(
+        Shipment,
+        on_delete=models.CASCADE,
+        related_name="packages",
+    )
+    package_sequence = models.PositiveIntegerField(default=1)
+    weight_kg = models.DecimalField(max_digits=8, decimal_places=3, default=Decimal("0.500"))
+    length_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    width_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    height_cm = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    tracking_number = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Shipment Package"
+        verbose_name_plural = "Shipment Packages"
+        ordering = ["package_sequence"]
+
+    def __str__(self):
+        return f"Package #{self.package_sequence} for {self.shipment.tracking_number} ({self.weight_kg}kg)"
+
+
+class ShipmentItem(BaseModel):
+    """
+    Linkage between a Shipment / Package and a specific OrderItem.
+    """
+    shipment = models.ForeignKey(
+        Shipment,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    package = models.ForeignKey(
+        ShipmentPackage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items",
+    )
+    order_item = models.ForeignKey(
+        "orders.OrderItem",
+        on_delete=models.CASCADE,
+        related_name="shipment_items",
+    )
+    quantity = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Shipment Item"
+        verbose_name_plural = "Shipment Items"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"ShipmentItem {self.order_item.variant.sku} x {self.quantity}"
+
+
+class ShipmentTrackingEvent(models.Model):
+    """
+    Immutable, append-only chronological log of tracking milestones.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    shipment = models.ForeignKey(
+        Shipment,
+        on_delete=models.CASCADE,
+        related_name="tracking_events",
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=ShipmentStatus.choices,
+    )
+    carrier_status_code = models.CharField(max_length=64, blank=True, default="")
+    description = models.CharField(max_length=255)
+    location = models.CharField(max_length=255, blank=True, default="")
+    event_timestamp = models.DateTimeField(default=timezone.now)
+    raw_payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Shipment Tracking Event"
+        verbose_name_plural = "Shipment Tracking Events"
+        ordering = ["-event_timestamp"]
+
+    def __str__(self):
+        return f"{self.shipment.tracking_number} — {self.status} at {self.location}"
+

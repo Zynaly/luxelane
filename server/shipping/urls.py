@@ -1,5 +1,5 @@
 """
-shipping/urls.py — URLs for Carriers, Zones, Rate Cards, Carrier Credentials, and Checkout Rates.
+shipping/urls.py — URLs for Carriers, Zones, Rate Cards, Credentials, Checkout Rates, Shipments, and Tracking.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
@@ -10,6 +10,12 @@ from shipping.views import (
     ShippingZoneViewSet,
     ShippingRateCardViewSet,
     CheckoutRatesView,
+    ShipmentViewSet,
+    VendorMyShipmentsViewSet,
+    ShipmentLabelView,
+    ShipmentCancelView,
+    ShipmentTrackView,
+    CarrierWebhookView,
 )
 
 # Public & standard shipping routers
@@ -17,8 +23,14 @@ shipping_router = DefaultRouter()
 shipping_router.register(r"carriers", CarrierViewSet, basename="carrier")
 shipping_router.register(r"zones", ShippingZoneViewSet, basename="shipping-zone")
 shipping_router.register(r"rate-cards", ShippingRateCardViewSet, basename="shipping-rate-card")
+shipping_router.register(r"shipments", ShipmentViewSet, basename="shipment")
+shipping_router.register(r"vendor/me/shipments", VendorMyShipmentsViewSet, basename="vendor-my-shipment")
 
 shipping_urlpatterns = [
+    path("shipments/<uuid:pk>/label/", ShipmentLabelView.as_view(), name="shipment-label"),
+    path("shipments/<uuid:pk>/cancel/", ShipmentCancelView.as_view(), name="shipment-cancel"),
+    path("track/<str:tracking_number>/", ShipmentTrackView.as_view(), name="shipment-track"),
+    path("carrier-webhook/", CarrierWebhookView.as_view(), name="carrier-webhook"),
     path("", include(shipping_router.urls)),
 ]
 
@@ -37,6 +49,7 @@ shipping_admin_urls = [
 
 # Default package urlpatterns
 urlpatterns = [
-    path("", include(shipping_router.urls)),
+    path("", include(shipping_urlpatterns)),
     path("checkout/rates/", CheckoutRatesView.as_view(), name="checkout-rates-direct"),
 ]
+

@@ -1629,6 +1629,99 @@ export interface CheckoutRatesRequest {
   line1?: string;
 }
 
+// ── Sprint 13 Interfaces: Shipments, Labels & Tracking ──────────────────────
+
+export interface ShipmentTrackingEvent {
+  id: string;
+  status: string;
+  carrier_status_code: string;
+  description: string;
+  location: string;
+  event_timestamp: string;
+  raw_payload?: Record<string, any>;
+  created_at: string;
+}
+
+export interface ShipmentPackage {
+  id: string;
+  package_sequence: number;
+  weight_kg: string;
+  length_cm?: string | null;
+  width_cm?: string | null;
+  height_cm?: string | null;
+  tracking_number: string;
+  created_at: string;
+}
+
+export interface ShipmentItem {
+  id: string;
+  package?: string | null;
+  order_item: string;
+  sku: string;
+  product_name: string;
+  quantity: number;
+  created_at: string;
+}
+
+export interface Shipment {
+  id: string;
+  order: string;
+  order_number: string;
+  vendor_order?: string | null;
+  vendor_name?: string | null;
+  warehouse?: string | null;
+  carrier?: string | null;
+  carrier_name?: string | null;
+  tracking_number: string;
+  tracking_url: string;
+  label_url: string;
+  label_format: string;
+  rate_quote?: string | null;
+  is_self_shipped: boolean;
+  status: string;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  packages: ShipmentPackage[];
+  items: ShipmentItem[];
+  tracking_events: ShipmentTrackingEvent[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateShipmentRequest {
+  order_id: string;
+  vendor_order_id?: string;
+  warehouse_id?: string;
+  carrier_id?: string;
+  rate_quote_id?: string;
+  tracking_number?: string;
+  tracking_url?: string;
+  is_self_shipped?: boolean;
+  items: {
+    order_item_id: string;
+    quantity: number;
+  }[];
+  packages?: {
+    package_sequence?: number;
+    weight_kg?: string;
+    length_cm?: string;
+    width_cm?: string;
+    height_cm?: string;
+    tracking_number?: string;
+  }[];
+}
+
+export interface PublicTrackingResponse {
+  tracking_number: string;
+  status: string;
+  carrier: string;
+  carrier_code: string;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  tracking_url?: string;
+  events: ShipmentTrackingEvent[];
+}
+
 export const ShippingAPI = {
   getCarriers: async (): Promise<Carrier[]> => {
     const res = await apiRequest<any>('/shipping/carriers/');
@@ -1655,6 +1748,71 @@ export const ShippingAPI = {
   },
   adminCreateCredential: async (data: any): Promise<any> => {
     return apiRequest<any>('/admin/shipping/carrier-credentials/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Sprint 13: Shipment Fulfillment, Labels & Tracking
+  getShipments: async (params: { order_id?: string; status?: string } = {}): Promise<Shipment[]> => {
+    const query = new URLSearchParams();
+    if (params.order_id) query.set('order_id', params.order_id);
+    if (params.status) query.set('status', params.status);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/shipping/shipments/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getVendorShipments: async (): Promise<Shipment[]> => {
+    const res = await apiRequest<any>('/shipping/vendor/me/shipments/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getShipment: async (id: string): Promise<Shipment> => {
+    return apiRequest<Shipment>(`/shipping/shipments/${id}/`, { method: 'GET' });
+  },
+
+  createShipment: async (data: CreateShipmentRequest): Promise<Shipment> => {
+    return apiRequest<Shipment>('/shipping/shipments/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getLabel: async (id: string): Promise<{
+    shipment_id: string;
+    label_url: string;
+    label_format: string;
+    tracking_number: string;
+  }> => {
+    return apiRequest<{
+      shipment_id: string;
+      label_url: string;
+      label_format: string;
+      tracking_number: string;
+    }>(`/shipping/shipments/${id}/label/`, { method: 'POST' });
+  },
+
+  cancelShipment: async (id: string, reason?: string): Promise<Shipment> => {
+    return apiRequest<Shipment>(`/shipping/shipments/${id}/cancel/`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason || '' }),
+    });
+  },
+
+  track: async (trackingNumber: string): Promise<PublicTrackingResponse> => {
+    return apiRequest<PublicTrackingResponse>(`/shipping/track/${encodeURIComponent(trackingNumber)}/`, {
+      method: 'GET',
+    });
+  },
+
+  postCarrierWebhook: async (data: {
+    tracking_number: string;
+    status: string;
+    description?: string;
+    location?: string;
+  }): Promise<{ received: boolean; tracking_number: string }> => {
+    return apiRequest<{ received: boolean; tracking_number: string }>('/shipping/carrier-webhook/', {
       method: 'POST',
       body: JSON.stringify(data),
     });

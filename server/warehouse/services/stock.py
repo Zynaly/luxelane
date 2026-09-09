@@ -86,6 +86,23 @@ def consume(
     return movement
 
 
+def consume_reservation(
+    reservation,
+    performed_by = None,
+) -> StockMovement:
+    """
+    Consumes a committed stock reservation on order fulfillment/shipment dispatch:
+    Decrements Inventory.on_hand and reserved_cache, and logs StockMovement.
+    """
+    return consume(
+        inventory=reservation.inventory,
+        quantity=reservation.quantity,
+        reference_id=reservation.id,
+        performed_by=performed_by,
+    )
+
+
+
 def restock(
     inventory: Inventory,
     quantity: int,
