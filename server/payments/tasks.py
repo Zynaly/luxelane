@@ -2,6 +2,7 @@
 payments/tasks.py — Asynchronous Celery tasks for webhook processing & event pipelines.
 """
 import logging
+from celery import shared_task
 from django.utils import timezone
 from django.db import transaction
 from config.celery_app import app as celery_app
@@ -128,7 +129,32 @@ def process_webhook_event(self, event_id: str):
     except Exception as exc:
         logger.exception(f"Error processing WebhookEvent {event_id}: {exc}")
         event.status = WebhookStatus.FAILED
-        event.error_message = str(exc)
         event.replay_count += 1
         event.save(update_fields=["status", "error_message", "replay_count"])
         raise self.retry(exc=exc, countdown=10)
+
+
+@shared_task(name="payments.tasks.release_eligible_escrows_task")
+def release_eligible_escrows_task():
+    """
+    Scheduled job (Celery beat) to auto-release mature vendor escrow holds.
+    """
+    from payments.services.escrow import escrow_service
+    released = escrow_service.release_eligible_escrows()
+    logger.info(f"release_eligible_escrows_task completed: {released} holds released.")
+    return {"released_count": released}
+
+
+@shared_task(name="payments.tasks.reconcile_ledger_task")
+def reconcile_ledger_task():
+    """
+    Nightly scheduled job to audit ledger integrity and detect unbalanced entries.
+    """
+    from payments.services.ledger import ledger_service
+    report = ledger_service.reconcile()
+    if not report["is_balanced"]:
+        logger.critical(f"LEDGER RECONCILIATION INTEGRITY ALERT: {report}")
+    else:
+        logger.info(f"Ledger reconciliation passed: {report}")
+    return report
+

@@ -88,3 +88,106 @@ class WebhookEventSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+# ── Sprint 12: Ledger, Escrow, Wallet & COD Serializers ───────────────────────
+
+from accounts.models import LedgerAccount, LedgerEntry
+from payments.models import EscrowHold, CODCollection
+from payments.services.ledger import ledger_service
+
+
+class LedgerEntrySerializer(serializers.ModelSerializer):
+    account_key = serializers.CharField(source="account.account_key", read_only=True)
+
+    class Meta:
+        model = LedgerEntry
+        fields = [
+            "id",
+            "account",
+            "account_key",
+            "amount",
+            "entry_group_id",
+            "reference_type",
+            "reference_id",
+            "memo",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class LedgerAccountSerializer(serializers.ModelSerializer):
+    balance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LedgerAccount
+        fields = [
+            "id",
+            "account_key",
+            "account_type",
+            "owner_user",
+            "owner_vendor_id",
+            "currency",
+            "balance",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_balance(self, obj) -> str:
+        return str(ledger_service.get_account_balance(obj))
+
+
+class EscrowHoldSerializer(serializers.ModelSerializer):
+    vendor_name = serializers.CharField(source="vendor.display_name", read_only=True)
+    order_number = serializers.CharField(source="vendor_order.order.order_number", read_only=True)
+
+    class Meta:
+        model = EscrowHold
+        fields = [
+            "id",
+            "vendor_order",
+            "vendor",
+            "vendor_name",
+            "order_number",
+            "gross_amount",
+            "commission_amount",
+            "net_vendor_amount",
+            "currency",
+            "status",
+            "held_at",
+            "eligible_at",
+            "released_at",
+            "release_reference",
+            "notes",
+        ]
+        read_only_fields = fields
+
+
+class CODCollectionSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField(source="order.order_number", read_only=True)
+    collected_by_name = serializers.CharField(source="collected_by.get_full_name", read_only=True)
+
+    class Meta:
+        model = CODCollection
+        fields = [
+            "id",
+            "order",
+            "order_number",
+            "amount",
+            "currency",
+            "status",
+            "otp_attempts",
+            "collected_at",
+            "collected_by",
+            "collected_by_name",
+            "receipt_number",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CODVerifyOTPSerializer(serializers.Serializer):
+    otp_code = serializers.CharField(max_length=6, min_length=6, required=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+

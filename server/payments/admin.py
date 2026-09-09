@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import PaymentAttempt, Transaction, SavedCard, WebhookEvent
+from .models import PaymentAttempt, Transaction, SavedCard, WebhookEvent, EscrowHold, CODCollection
 
 
 @admin.register(PaymentAttempt)
@@ -32,3 +32,20 @@ class WebhookEventAdmin(admin.ModelAdmin):
     list_filter = ["source", "status", "event_type"]
     search_fields = ["provider_event_id", "event_type"]
     readonly_fields = ["id", "created_at"]
+
+
+@admin.register(EscrowHold)
+class EscrowHoldAdmin(admin.ModelAdmin):
+    list_display = ["vendor_order", "vendor", "net_vendor_amount", "gross_amount", "status", "eligible_at", "released_at"]
+    list_filter = ["status", "currency"]
+    search_fields = ["vendor_order__order__order_number", "vendor__display_name", "release_reference"]
+    readonly_fields = ["id", "created_at", "updated_at", "held_at"]
+
+
+@admin.register(CODCollection)
+class CODCollectionAdmin(admin.ModelAdmin):
+    list_display = ["order", "amount", "currency", "status", "collected_by", "collected_at", "receipt_number"]
+    list_filter = ["status", "currency"]
+    search_fields = ["order__order_number", "receipt_number", "otp_code"]
+    readonly_fields = ["id", "created_at", "updated_at"]
+

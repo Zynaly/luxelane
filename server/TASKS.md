@@ -326,19 +326,19 @@
 
 ### Tasks
 
-- [ ] **S12-T1** `LedgerAccount`, `LedgerEntry` (append-only, immutable) in `accounts` app
-- [ ] **S12-T2** `EscrowHold` (OneToOne → VendorOrder) model
-- [ ] **S12-T3** `CODCollection` model
-- [ ] **S12-T4** Migrations
-- [ ] **S12-T5** `payments.services.ledger.post()` — double-entry, asserts group sums to zero
-- [ ] **S12-T6** `payments.services.escrow` — `create_hold()`, `schedule_release()`, `release_job()` Celery beat
-- [ ] **S12-T7** `WalletBalanceView` + `WalletTransactionsView`
-- [ ] **S12-T8** `VendorEscrowBalanceView`
-- [ ] **S12-T9** `CODConfirmView` + `CODCollectView` (OTP verify → ledger post → status transition)
-- [ ] **S12-T10** `AdminLedgerViewSet` + `AdminLedgerReconciliationView` + nightly Celery job
-- [ ] **S12-T11** Wire all Sprint 12 URLs
+- [x] **S12-T1** `LedgerAccount`, `LedgerEntry` (append-only, immutable) in `accounts` app
+- [x] **S12-T2** `EscrowHold` (OneToOne → VendorOrder) model
+- [x] **S12-T3** `CODCollection` model
+- [x] **S12-T4** Migrations
+- [x] **S12-T5** `payments.services.ledger.post()` — double-entry, asserts group sums to zero
+- [x] **S12-T6** `payments.services.escrow` — `create_hold()`, `schedule_release()`, `release_job()` Celery beat
+- [x] **S12-T7** `WalletBalanceView` + `WalletTransactionsView`
+- [x] **S12-T8** `VendorEscrowBalanceView`
+- [x] **S12-T9** `CODConfirmView` + `CODCollectView` (OTP verify → ledger post → status transition)
+- [x] **S12-T10** `AdminLedgerViewSet` + `AdminLedgerReconciliationView` + nightly Celery job
+- [x] **S12-T11** Wire all Sprint 12 URLs
 
-**S12 Status: ⏳ Pending**
+**S12 Status: ✅ Complete** — 13/13 payments unit tests passing · 159/159 project tests passing · Frontend PaymentAPI & AccountPage wallet integrated
 
 ---
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../../components/Icon';
-import API, { AddressData, Order, SavedCard } from '../../../services/api';
+import API, { AddressData, Order, SavedCard, WalletBalance, WalletTransaction } from '../../../services/api';
 
 interface AccountPageProps {
   onLogout?: () => void;
@@ -16,13 +16,18 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'notifications' | 'security' | 'vendor_apply' | 'payments'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'notifications' | 'security' | 'vendor_apply' | 'payments' | 'wallet'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Saved Payment Cards State (Sprint 11)
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
   const [cardsLoading, setCardsLoading] = useState(false);
+
+  // Customer Wallet State (Sprint 12)
+  const [wallet, setWallet] = useState<WalletBalance | null>(null);
+  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   // Orders State (Sprint 10)
   const [orders, setOrders] = useState<Order[]>([]);
@@ -90,11 +95,28 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
     fetchNotifications();
     fetchOrders();
     fetchCards();
+    fetchWallet();
   }, []);
 
   const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  const fetchWallet = async () => {
+    try {
+      setWalletLoading(true);
+      const [bal, txs] = await Promise.all([
+        API.Payment.getWalletBalance(),
+        API.Payment.getWalletTransactions(),
+      ]);
+      setWallet(bal);
+      setWalletTransactions(txs.results || []);
+    } catch (err: any) {
+      console.error('Failed to load wallet:', err);
+    } finally {
+      setWalletLoading(false);
+    }
   };
 
   const fetchCards = async () => {
@@ -486,6 +508,15 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
               }`}
             >
               <Icon name="credit-card" className="w-5 h-5 mr-3" /> Payment Methods ({savedCards.length})
+            </button>
+            <button
+              id="account-tab-wallet"
+              onClick={() => setActiveTab('wallet')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === 'wallet' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Icon name="star" className="w-5 h-5 mr-3 text-amber-500" /> Wallet & Credit (${wallet ? wallet.balance : '0.00'})
             </button>
             {profile.role === 'customer' && (
               <button
@@ -1198,6 +1229,98 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* WALLET & STORE CREDIT TAB (Sprint 12) */}
+          {activeTab === 'wallet' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Store Credit & Wallet</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Your personal platform credit ledger for seamless luxury shopping.</p>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-stone-500 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+                  <Icon name="check" className="w-4 h-4 text-emerald-600" />
+                  <span>Double-Entry Immutable Ledger</span>
+                </div>
+              </div>
+
+              {/* Luxury Balance Card */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 p-6 sm:p-8 text-white shadow-xl mb-8">
+                <div className="absolute right-0 top-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-semibold tracking-widest text-amber-400 uppercase">Available Store Credit</span>
+                    <div className="flex items-baseline space-x-2 mt-2">
+                      <span className="text-4xl sm:text-5xl font-extrabold tracking-tight font-serif text-white">
+                        ${wallet ? wallet.balance : '0.00'}
+                      </span>
+                      <span className="text-sm font-semibold text-stone-400">USD</span>
+                    </div>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/10 backdrop-blur-md text-amber-300 border border-white/10">
+                      ✓ Instant Redemption
+                    </span>
+                    <p className="text-[11px] text-stone-400 mt-2 max-w-xs">
+                      Credit is automatically eligible to offset checkout grand totals on any verified atelier order.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transactions Ledger */}
+              <div>
+                <h3 className="text-base font-bold text-gray-900 mb-4">Transaction History</h3>
+                {walletLoading ? (
+                  <div className="text-center py-12 text-sm text-gray-500">Loading wallet entries...</div>
+                ) : walletTransactions.length === 0 ? (
+                  <div className="text-center py-10 border border-dashed border-gray-200 rounded-xl">
+                    <p className="text-xs text-gray-500">No store credit transactions recorded yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-stone-50 text-stone-600 border-b border-stone-200">
+                        <tr>
+                          <th className="py-3 px-4 font-semibold">Date</th>
+                          <th className="py-3 px-4 font-semibold">Activity</th>
+                          <th className="py-3 px-4 font-semibold">Reference</th>
+                          <th className="py-3 px-4 font-semibold text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {walletTransactions.map((tx) => {
+                          const num = parseFloat(tx.amount);
+                          // In customer wallet account, credit (liability) is negative in DB, meaning +credit to user.
+                          const isCredit = num <= 0;
+                          return (
+                            <tr key={tx.id} className="hover:bg-stone-50/60 transition-colors">
+                              <td className="py-3 px-4 text-stone-500">
+                                {new Date(tx.created_at).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </td>
+                              <td className="py-3 px-4 font-medium text-stone-900">
+                                {tx.memo || tx.reference_type.replace('_', ' ')}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px] text-stone-400">
+                                {tx.reference_type}
+                              </td>
+                              <td className={`py-3 px-4 text-right font-mono font-bold ${isCredit ? 'text-emerald-600' : 'text-stone-900'}`}>
+                                {isCredit ? `+$${Math.abs(num).toFixed(2)}` : `-$${Math.abs(num).toFixed(2)}`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </main>

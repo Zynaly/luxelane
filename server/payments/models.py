@@ -189,3 +189,101 @@ class WebhookEvent(models.Model):
 
     def __str__(self):
         return f"Webhook [{self.source}] {self.provider_event_id} ({self.status})"
+
+
+class EscrowStatus(models.TextChoices):
+    HELD = "held", "Held"
+    ELIGIBLE_FOR_RELEASE = "eligible_for_release", "Eligible For Release"
+    RELEASED = "released", "Released"
+    DISPUTED = "disputed", "Disputed"
+    REFUNDED = "refunded", "Refunded"
+
+
+class CODStatus(models.TextChoices):
+    PENDING = "pending", "Pending Collection"
+    OTP_SENT = "otp_sent", "OTP Sent to Customer"
+    COLLECTED = "collected", "Collected & Verified"
+    FAILED = "failed", "Collection Failed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class EscrowHold(BaseModel):
+    """
+    Escrow Hold for a specific VendorOrder.
+    Locks net vendor earnings until the customer delivery & return period passes.
+    """
+    vendor_order = models.OneToOneField(
+        "orders.VendorOrder",
+        on_delete=models.CASCADE,
+        related_name="escrow_hold",
+    )
+    vendor = models.ForeignKey(
+        "vendors.Vendor",
+        on_delete=models.CASCADE,
+        related_name="escrow_holds",
+    )
+    gross_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    commission_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    net_vendor_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="USD")
+    status = models.CharField(
+        max_length=30,
+        choices=EscrowStatus.choices,
+        default=EscrowStatus.HELD,
+        db_index=True,
+    )
+    held_at = models.DateTimeField(auto_now_add=True)
+    eligible_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+    release_reference = models.CharField(max_length=100, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-held_at"]
+        verbose_name = "Escrow Hold"
+        verbose_name_plural = "Escrow Holds"
+
+    def __str__(self):
+        return f"EscrowHold {self.vendor_order.order.order_number} ({self.vendor.display_name}) - {self.status} (${self.net_vendor_amount})"
+
+
+class CODCollection(BaseModel):
+    """
+    Tracks Cash on Delivery collection, delivery agent OTP verification,
+    and subsequent remittance into the platform double-entry ledger.
+    """
+    order = models.OneToOneField(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="cod_collection",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="USD")
+    status = models.CharField(
+        max_length=30,
+        choices=CODStatus.choices,
+        default=CODStatus.PENDING,
+        db_index=True,
+    )
+    otp_code = models.CharField(max_length=6, blank=True, default="")
+    otp_generated_at = models.DateTimeField(null=True, blank=True)
+    otp_attempts = models.IntegerField(default=0)
+    collected_at = models.DateTimeField(null=True, blank=True)
+    collected_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="collected_cods",
+    )
+    receipt_number = models.CharField(max_length=64, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "COD Collection"
+        verbose_name_plural = "COD Collections"
+
+    def __str__(self):
+        return f"CODCollection {self.order.order_number} - {self.status} (${self.amount})"
+

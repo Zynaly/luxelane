@@ -1937,6 +1937,88 @@ export interface AuthorizeNetChargeRequest {
   save_card?: boolean;
 }
 
+// ── Ledger, Escrow, Wallet & COD Interfaces (Sprint 12) ─────────────────────
+
+export interface WalletBalance {
+  balance: string;
+  currency: string;
+  account_key: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  account: string;
+  account_key: string;
+  amount: string;
+  entry_group_id: string;
+  reference_type: string;
+  reference_id?: string;
+  memo?: string;
+  created_at: string;
+}
+
+export interface VendorEscrowHold {
+  id: string;
+  vendor_order: string;
+  vendor: string;
+  vendor_name: string;
+  order_number: string;
+  gross_amount: string;
+  commission_amount: string;
+  net_vendor_amount: string;
+  currency: string;
+  status: 'held' | 'eligible_for_release' | 'released' | 'disputed' | 'refunded';
+  held_at: string;
+  eligible_at?: string;
+  released_at?: string;
+  release_reference?: string;
+  notes?: string;
+}
+
+export interface VendorEscrowSummary {
+  vendor_id: string;
+  vendor_name: string;
+  held_balance: string;
+  eligible_balance: string;
+  released_balance: string;
+  currency: string;
+  recent_holds: VendorEscrowHold[];
+}
+
+export interface CODSendOTPResponse {
+  status: string;
+  order_number: string;
+  message: string;
+  otp_code?: string;
+}
+
+export interface CODCollectResponse {
+  status: string;
+  receipt_number: string;
+  order_number: string;
+  amount?: string;
+}
+
+export interface LedgerAccount {
+  id: string;
+  account_key: string;
+  account_type: string;
+  owner_user?: string;
+  owner_vendor_id?: string;
+  currency: string;
+  balance: string;
+  created_at: string;
+}
+
+export interface LedgerReconciliationReport {
+  is_balanced: boolean;
+  total_debits: string;
+  total_credits: string;
+  net_discrepancy: string;
+  accounts_count: number;
+  entries_count: number;
+}
+
 export const PaymentAPI = {
   getMethods: async (): Promise<PaymentMethodsResponse> => {
     return apiRequest<PaymentMethodsResponse>('/payments/methods/', { method: 'GET' });
@@ -1979,6 +2061,33 @@ export const PaymentAPI = {
     });
   },
 
+  // Wallet & Store Credit (Sprint 12)
+  getWalletBalance: async (): Promise<WalletBalance> => {
+    return apiRequest<WalletBalance>('/payments/wallet/', { method: 'GET' });
+  },
+
+  getWalletTransactions: async (): Promise<{ results: WalletTransaction[]; count: number }> => {
+    return apiRequest<{ results: WalletTransaction[]; count: number }>('/payments/wallet/transactions/', { method: 'GET' });
+  },
+
+  // Vendor Escrow (Sprint 12)
+  getVendorEscrow: async (): Promise<VendorEscrowSummary> => {
+    return apiRequest<VendorEscrowSummary>('/payments/vendor/escrow/', { method: 'GET' });
+  },
+
+  // Cash on Delivery (COD) (Sprint 12)
+  sendCODOTP: async (orderId: string): Promise<CODSendOTPResponse> => {
+    return apiRequest<CODSendOTPResponse>(`/payments/cod/${orderId}/send-otp/`, { method: 'POST' });
+  },
+
+  collectCOD: async (orderId: string, data: { otp_code: string; notes?: string }): Promise<CODCollectResponse> => {
+    return apiRequest<CODCollectResponse>(`/payments/cod/${orderId}/collect/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Admin Transactions & Webhooks
   adminTransactions: async (params: { gateway?: string; status?: string; search?: string } = {}): Promise<PaymentTransaction[]> => {
     const query = new URLSearchParams();
     if (params.gateway) query.set('gateway', params.gateway);
@@ -1993,6 +2102,29 @@ export const PaymentAPI = {
     return apiRequest<{ status: string; message: string }>(`/admin/webhooks/${webhookId}/replay/`, {
       method: 'POST',
     });
+  },
+
+  // Admin Double-Entry Ledger (Sprint 12)
+  getAdminLedgerAccounts: async (params: { account_type?: string; search?: string } = {}): Promise<LedgerAccount[]> => {
+    const query = new URLSearchParams();
+    if (params.account_type) query.set('account_type', params.account_type);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/ledger/accounts/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getAdminLedgerEntries: async (params: { reference_type?: string; entry_group_id?: string } = {}): Promise<WalletTransaction[]> => {
+    const query = new URLSearchParams();
+    if (params.reference_type) query.set('reference_type', params.reference_type);
+    if (params.entry_group_id) query.set('entry_group_id', params.entry_group_id);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/ledger/entries/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  reconcileLedger: async (): Promise<LedgerReconciliationReport> => {
+    return apiRequest<LedgerReconciliationReport>('/admin/ledger/reconcile/', { method: 'GET' });
   },
 };
 

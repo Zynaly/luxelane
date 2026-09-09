@@ -358,3 +358,155 @@ class PaymentsAppTests(APITestCase):
 
         event.refresh_from_db()
         self.assertEqual(event.replay_count, 1)
+
+    # ── Sprint 12 Tests: Ledger, Escrow, Wallet & COD ─────────────────────────
+
+    def test_ledger_double_entry_balance_enforcement(self):
+        """Ledger strictly enforces sum(amount) == 0.00."""
+        from payments.services.ledger import ledger_service
+        from accounts.models import LedgerAccountType, LedgerEntry
+        from rest_framework.exceptions import ValidationError
+
+        # 1. Unbalanced set fails
+        unbalanced = [
+            {"account": "platform_cash", "amount": Decimal("100.00")},
+            {"account": "vendor_escrow:v1", "amount": Decimal("-90.00")},
+        ]
+        with self.assertRaises(ValidationError):
+            ledger_service.post(unbalanced, reference_type="test_unbalanced")
+
+        # 2. Balanced set succeeds
+        balanced = [
+            {"account": "platform_cash", "amount": Decimal("150.00")},
+            {"account": f"customer_wallet:{self.customer.id}", "amount": Decimal("-150.00"), "account_type": LedgerAccountType.CUSTOMER_WALLET, "owner_user": self.customer},
+        ]
+        group_id = ledger_service.post(balanced, reference_type="test_balanced")
+        self.assertIsNotNone(group_id)
+
+        entries = LedgerEntry.objects.filter(entry_group_id=group_id)
+        self.assertEqual(entries.count(), 2)
+        self.assertEqual(sum(e.amount for e in entries), Decimal("0.00"))
+
+    def test_escrow_lifecycle_and_ledger_post(self):
+        """Escrow hold created, scheduled, released with balanced ledger entries."""
+        from payments.services.escrow import escrow_service
+        from payments.models import EscrowHold, EscrowStatus
+        from accounts.models import LedgerEntry
+
+        # 1. Create hold
+        hold = escrow_service.create_hold(self.vendor_order)
+        self.assertEqual(hold.status, EscrowStatus.HELD)
+        self.assertEqual(hold.net_vendor_amount, self.vendor_order.subtotal - self.vendor_order.commission_amount)
+
+        # 2. Schedule release
+        hold = escrow_service.schedule_release(self.vendor_order, delay_days=0)
+        self.assertEqual(hold.status, EscrowStatus.ELIGIBLE_FOR_RELEASE)
+        self.assertIsNotNone(hold.eligible_at)
+
+        # 3. Release hold
+        released_hold = escrow_service.release_hold(hold)
+        self.assertEqual(released_hold.status, EscrowStatus.RELEASED)
+        self.assertIsNotNone(released_hold.released_at)
+
+        # Verify ledger entries for release exist and balance
+        release_entries = LedgerEntry.objects.filter(reference_type="escrow_release", reference_id=hold.id)
+        self.assertEqual(release_entries.count(), 2)
+        self.assertEqual(sum(e.amount for e in release_entries), Decimal("0.00"))
+
+    def test_customer_wallet_balance_and_transactions(self):
+        """Customer can check their wallet credit balance and view transactions."""
+        from payments.services.ledger import ledger_service
+
+        # Deposit $120 store credit
+        ledger_service.post_wallet_deposit(self.customer, Decimal("120.00"), memo="Loyalty reward credit")
+
+        self.client.force_authenticate(user=self.customer)
+
+        # Check balance
+        bal_resp = self.client.get("/api/v1/payments/wallet/")
+        self.assertEqual(bal_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(Decimal(bal_resp.data["balance"]), Decimal("120.00"))
+
+        # Check transaction history
+        tx_resp = self.client.get("/api/v1/payments/wallet/transactions/")
+        self.assertEqual(tx_resp.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(tx_resp.data["count"], 1)
+
+    def test_vendor_escrow_balance_view(self):
+        """Vendor owner can review their held, eligible, and released escrow."""
+        from payments.services.escrow import escrow_service
+
+        escrow_service.create_hold(self.vendor_order)
+
+        self.client.force_authenticate(user=self.vendor_owner)
+        resp = self.client.get("/api/v1/payments/vendor/escrow/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("held_balance", resp.data)
+        self.assertIn("eligible_balance", resp.data)
+        self.assertIn("released_balance", resp.data)
+        self.assertGreaterEqual(len(resp.data["recent_holds"]), 1)
+
+    def test_cod_send_otp_and_collect(self):
+        """Delivery agent requests COD OTP, verifies, collects funds, and updates order."""
+        from payments.models import CODCollection, CODStatus
+        from orders.models import OrderStatus
+
+        self.client.force_authenticate(user=self.platform_admin)
+
+        # 1. Send OTP
+        send_resp = self.client.post(f"/api/v1/payments/cod/{self.order.id}/send-otp/")
+        self.assertEqual(send_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(send_resp.data["status"], "otp_sent")
+        otp = send_resp.data["otp_code"]
+
+        # 2. Collect with invalid OTP
+        bad_collect = self.client.post(
+            f"/api/v1/payments/cod/{self.order.id}/collect/",
+            data={"otp_code": "000000"},
+            format="json",
+        )
+        self.assertEqual(bad_collect.status_code, status.HTTP_400_BAD_REQUEST)
+
+        # 3. Collect with valid OTP
+        good_collect = self.client.post(
+            f"/api/v1/payments/cod/{self.order.id}/collect/",
+            data={"otp_code": otp, "notes": "Handed to customer at concierge"},
+            format="json",
+        )
+        self.assertEqual(good_collect.status_code, status.HTTP_200_OK)
+        self.assertEqual(good_collect.data["status"], "collected")
+        self.assertIn("receipt_number", good_collect.data)
+
+        # Verify database state
+        cod_rec = CODCollection.objects.get(order=self.order)
+        self.assertEqual(cod_rec.status, CODStatus.COLLECTED)
+        self.assertIsNotNone(cod_rec.collected_at)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, OrderStatus.CONFIRMED)
+
+    def test_admin_ledger_reconciliation(self):
+        """Platform/Finance admin views reconciliation audit and ledger accounts."""
+        from payments.services.ledger import ledger_service
+
+        # Post a balanced entry
+        ledger_service.post_wallet_deposit(self.customer, Decimal("50.00"), memo="Gift card")
+
+        self.client.force_authenticate(user=self.finance_admin)
+
+        # 1. Audit reconciliation
+        recon_resp = self.client.get("/api/v1/admin/ledger/reconcile/")
+        self.assertEqual(recon_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(recon_resp.data["is_balanced"])
+        self.assertEqual(Decimal(recon_resp.data["net_discrepancy"]), Decimal("0.00"))
+
+        # 2. View accounts
+        acc_resp = self.client.get("/api/v1/admin/ledger/accounts/")
+        self.assertEqual(acc_resp.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(acc_resp.data["results"]), 1)
+
+        # 3. View entries
+        entry_resp = self.client.get("/api/v1/admin/ledger/entries/")
+        self.assertEqual(entry_resp.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(entry_resp.data["results"]), 1)
+

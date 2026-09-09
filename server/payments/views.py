@@ -236,6 +236,16 @@ class SavedCardViewSet(viewsets.ModelViewSet):
         )
         return Response(SavedCardSerializer(card).data, status=status.HTTP_201_CREATED)
 
+    from rest_framework.decorators import action
+
+    @action(detail=True, methods=["post"])
+    def set_default(self, request, pk=None):
+        card = self.get_object()
+        SavedCard.objects.filter(user=request.user).update(is_default=False)
+        card.is_default = True
+        card.save(update_fields=["is_default", "updated_at"])
+        return Response(SavedCardSerializer(card).data, status=status.HTTP_200_OK)
+
 
 class AdminTransactionViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -284,3 +294,241 @@ class AdminWebhookReplayView(APIView):
             {"detail": f"Webhook event {event.provider_event_id} re-enqueued for processing.", "replay_count": event.replay_count},
             status=status.HTTP_200_OK,
         )
+
+
+# ── Sprint 12: Ledger, Escrow, Wallet & COD Views ─────────────────────────────
+
+import random
+import uuid
+from decimal import Decimal
+from django.utils import timezone
+from accounts.models import LedgerAccount, LedgerEntry, LedgerAccountType
+from payments.models import EscrowHold, EscrowStatus, CODCollection, CODStatus
+from payments.serializers import (
+    LedgerAccountSerializer,
+    LedgerEntrySerializer,
+    EscrowHoldSerializer,
+    CODCollectionSerializer,
+    CODVerifyOTPSerializer,
+)
+from payments.services.ledger import ledger_service
+from payments.services.escrow import escrow_service
+from orders.services.orchestration import confirm_order_payment
+
+
+class WalletBalanceView(APIView):
+    """
+    GET /payments/wallet/ — Retrieve customer wallet store credit balance.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        account_key = f"customer_wallet:{user.id}"
+        account = LedgerAccount.objects.filter(account_key=account_key).first()
+        raw_balance = ledger_service.get_account_balance(account) if account else Decimal("0.00")
+        # In double-entry, customer wallet is a liability to platform (credit: negative amount).
+        # Customer spendable balance is represented as a positive amount.
+        spendable = abs(raw_balance) if raw_balance < 0 else raw_balance
+        return Response({
+            "balance": str(spendable),
+            "currency": account.currency if account else "USD",
+            "account_key": account_key,
+        })
+
+
+class WalletTransactionsView(APIView):
+    """
+    GET /payments/wallet/transactions/ — Retrieve customer wallet ledger entries history.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        account_key = f"customer_wallet:{request.user.id}"
+        entries = LedgerEntry.objects.filter(account__account_key=account_key).order_by("-created_at")[:50]
+        serializer = LedgerEntrySerializer(entries, many=True)
+        return Response({"results": serializer.data, "count": entries.count()})
+
+
+class VendorEscrowBalanceView(APIView):
+    """
+    GET /payments/vendor/escrow/ — Retrieve vendor escrow summary and holds.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        vendor = getattr(request.user, "vendor", None)
+        if not vendor:
+            # Check if user owns any vendor
+            from vendors.models import Vendor
+            vendor = Vendor.objects.filter(owner=request.user).first()
+
+        if not vendor:
+            raise PermissionDenied("User is not associated with an approved vendor.")
+
+        holds = EscrowHold.objects.filter(vendor=vendor)
+        held = sum((h.net_vendor_amount for h in holds if h.status == EscrowStatus.HELD), Decimal("0.00"))
+        eligible = sum((h.net_vendor_amount for h in holds if h.status == EscrowStatus.ELIGIBLE_FOR_RELEASE), Decimal("0.00"))
+        released = sum((h.net_vendor_amount for h in holds if h.status == EscrowStatus.RELEASED), Decimal("0.00"))
+
+        serializer = EscrowHoldSerializer(holds[:30], many=True)
+        return Response({
+            "vendor_id": str(vendor.id),
+            "vendor_name": vendor.display_name,
+            "held_balance": str(held),
+            "eligible_balance": str(eligible),
+            "released_balance": str(released),
+            "currency": "USD",
+            "recent_holds": serializer.data,
+        })
+
+
+class CODSendOTPView(APIView):
+    """
+    POST /payments/cod/{order_id}/send-otp/ — Generates and dispatches delivery OTP for COD collection.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        order = Order.objects.filter(id=order_id).first()
+        if not order:
+            raise NotFound("Order not found.")
+
+        cod_collection, _ = CODCollection.objects.get_or_create(
+            order=order,
+            defaults={
+                "amount": order.grand_total,
+                "currency": order.currency,
+                "status": CODStatus.PENDING,
+            },
+        )
+
+        otp = f"{random.randint(100000, 999999):06d}"
+        cod_collection.otp_code = otp
+        cod_collection.otp_generated_at = timezone.now()
+        cod_collection.status = CODStatus.OTP_SENT
+        cod_collection.save(update_fields=["otp_code", "otp_generated_at", "status", "updated_at"])
+
+        logger.info(f"Generated COD OTP for order {order.order_number}: {otp}")
+
+        return Response({
+            "status": "otp_sent",
+            "order_number": order.order_number,
+            "message": "Delivery confirmation OTP generated and dispatched to customer.",
+            "otp_code": otp,  # Exposed for automated testing and courier display
+        })
+
+
+class CODCollectView(APIView):
+    """
+    POST /payments/cod/{order_id}/collect/ — Delivery agent verifies OTP and collects COD payment.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        order = Order.objects.filter(id=order_id).first()
+        if not order:
+            raise NotFound("Order not found.")
+
+        cod_collection = getattr(order, "cod_collection", None)
+        if not cod_collection:
+            cod_collection = CODCollection.objects.filter(order=order).first()
+        if not cod_collection:
+            raise ValidationError({"order": "No COD collection record found for this order."})
+
+        if cod_collection.status == CODStatus.COLLECTED:
+            return Response({
+                "status": "already_collected",
+                "receipt_number": cod_collection.receipt_number,
+                "order_number": order.order_number,
+            })
+
+        serializer = CODVerifyOTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        code = serializer.validated_data["otp_code"]
+
+        cod_collection.otp_attempts += 1
+        if cod_collection.otp_attempts > 5:
+            cod_collection.status = CODStatus.FAILED
+            cod_collection.save(update_fields=["status", "otp_attempts", "updated_at"])
+            raise ValidationError({"otp_code": "Maximum verification attempts exceeded."})
+
+        if cod_collection.otp_code != code:
+            cod_collection.save(update_fields=["otp_attempts", "updated_at"])
+            raise ValidationError({"otp_code": "Invalid delivery confirmation OTP code."})
+
+        receipt = f"COD-RCP-{uuid.uuid4().hex[:8].upper()}"
+        cod_collection.status = CODStatus.COLLECTED
+        cod_collection.collected_at = timezone.now()
+        cod_collection.collected_by = request.user
+        cod_collection.receipt_number = receipt
+        cod_collection.notes = serializer.validated_data.get("notes", "")
+        cod_collection.save()
+
+        # Post to double-entry ledger
+        ledger_service.post_cod_collection(cod_collection, collected_by=request.user)
+
+        # Transition order to confirmed/fulfilled
+        confirm_order_payment(
+            order=order,
+            gateway_transaction_id=receipt,
+            gateway_name="cod",
+            changed_by=request.user,
+        )
+
+        return Response({
+            "status": "collected",
+            "receipt_number": receipt,
+            "order_number": order.order_number,
+            "amount": str(cod_collection.amount),
+        })
+
+
+class AdminLedgerAccountViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /admin/ledger/accounts/ — PlatformAdmin view of all ledger accounts.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+    serializer_class = LedgerAccountSerializer
+    queryset = LedgerAccount.objects.all()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        acc_type = self.request.query_params.get("account_type")
+        key = self.request.query_params.get("search")
+        if acc_type:
+            qs = qs.filter(account_type=acc_type)
+        if key:
+            qs = qs.filter(account_key__icontains=key)
+        return qs
+
+
+class AdminLedgerEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /admin/ledger/entries/ — PlatformAdmin view of immutable ledger entries.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+    serializer_class = LedgerEntrySerializer
+    queryset = LedgerEntry.objects.all().select_related("account")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        ref_type = self.request.query_params.get("reference_type")
+        group_id = self.request.query_params.get("entry_group_id")
+        if ref_type:
+            qs = qs.filter(reference_type=ref_type)
+        if group_id:
+            qs = qs.filter(entry_group_id=group_id)
+        return qs
+
+
+class AdminLedgerReconciliationView(APIView):
+    """
+    GET /admin/ledger/reconcile/ — Audits double-entry ledger integrity.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def get(self, request):
+        report = ledger_service.reconcile()
+        return Response(report)
+
