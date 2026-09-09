@@ -49,10 +49,11 @@ LOCAL_APPS = [
     "warehouse",
     # Sprint 8:
     "cart_and_pricing",
+    # Sprint 9:
+    "shipping",
     # Added sprint-by-sprint:
     # "orders",
     # "payments",
-    # "shipping",
 ]
 
 

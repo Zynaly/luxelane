@@ -24,9 +24,22 @@ from cart_and_pricing.urls import (
     tax_urlpatterns,
     cart_admin_urls,
 )
+from shipping.urls import (
+    shipping_urlpatterns,
+    checkout_shipping_urlpatterns,
+    shipping_admin_urls,
+)
 
 # Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
-combined_admin_urls = vendor_admin_urls + catalog_admin_urls + warehouse_admin_urls + cart_admin_urls
+combined_admin_urls = (
+    vendor_admin_urls
+    + catalog_admin_urls
+    + warehouse_admin_urls
+    + cart_admin_urls
+    + shipping_admin_urls
+)
+
+combined_checkout_urls = tax_urlpatterns + checkout_shipping_urlpatterns
 
 
 urlpatterns = [
@@ -61,7 +74,10 @@ urlpatterns = [
     # Sprint 8 — Cart, Pricing & Promotions
     path("cart/", include((cart_urlpatterns, "cart"))),
     path("coupons/", include((coupon_urlpatterns, "coupons"))),
-    path("checkout/", include((tax_urlpatterns, "checkout"))),
+    path("checkout/", include((combined_checkout_urls, "checkout"))),
+
+    # Sprint 9 — Shipping Rates & Packing
+    path("shipping/", include((shipping_urlpatterns, "shipping"))),
 
     # All admin sub-patterns merged under a single admin/ prefix
     path("admin/", include((combined_admin_urls, "admin-api"))),

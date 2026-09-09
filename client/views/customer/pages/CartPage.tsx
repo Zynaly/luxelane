@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import API, { Cart, CartItem, Coupon, CartValidationResult } from '../../../services/api';
+import API, { Cart, CartItem, Coupon, CartValidationResult, RateQuote } from '../../../services/api';
 import { Icon } from '../../../components/Icon';
 
 interface CartPageProps {
@@ -17,6 +17,13 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
   const [validationResult, setValidationResult] = useState<CartValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+
+  // Sprint 9: Shipping Quotes state
+  const [shippingRates, setShippingRates] = useState<RateQuote[]>([]);
+  const [selectedShippingQuote, setSelectedShippingQuote] = useState<RateQuote | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [destCountry, setDestCountry] = useState('US');
+  const [destPostalCode, setDestPostalCode] = useState('10001');
 
   const fetchCart = useCallback(async () => {
     try {
@@ -40,6 +47,26 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
     }
   }, []);
 
+  const fetchShippingRates = useCallback(async (cartId?: string, country?: string, zip?: string) => {
+    try {
+      setShippingLoading(true);
+      const quotes = await API.Shipping.getCheckoutRates({
+        cart_id: cartId,
+        country: country || destCountry,
+        postal_code: zip || destPostalCode,
+      });
+      setShippingRates(quotes);
+      if (quotes.length > 0 && !selectedShippingQuote) {
+        // Select lowest or standard by default
+        setSelectedShippingQuote(quotes[0]);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch shipping rates:', err);
+    } finally {
+      setShippingLoading(false);
+    }
+  }, [destCountry, destPostalCode, selectedShippingQuote]);
+
   const runValidation = useCallback(async () => {
     try {
       setValidating(true);
@@ -60,10 +87,13 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
   useEffect(() => {
     if (cart && cart.items && cart.items.length > 0) {
       runValidation();
+      fetchShippingRates(cart.id);
     } else {
       setValidationResult(null);
+      setShippingRates([]);
+      setSelectedShippingQuote(null);
     }
-  }, [cart?.items?.length, runValidation]);
+  }, [cart?.id, cart?.items?.length, runValidation, fetchShippingRates]);
 
   const handleUpdateQuantity = async (item: CartItem, newQty: number) => {
     if (newQty < 1) return;
@@ -147,6 +177,16 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
   const items = cart?.items || [];
   const breakdown = cart?.price_breakdown;
   const hasIssues = validationResult && !validationResult.is_valid && validationResult.issues.length > 0;
+
+  // Dynamic shipping calculation
+  const effectiveShipping = selectedShippingQuote
+    ? parseFloat(selectedShippingQuote.amount)
+    : parseFloat(breakdown?.shipping_total || '0');
+
+  const subtotal = parseFloat(breakdown?.subtotal || '0');
+  const discount = parseFloat(breakdown?.discount_total || '0');
+  const tax = parseFloat(breakdown?.tax_total || '0');
+  const dynamicGrandTotal = (subtotal - discount + effectiveShipping + tax).toFixed(2);
 
   return (
     <div className="bg-stone-50 min-h-screen py-10">
@@ -326,6 +366,89 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                 })}
               </div>
 
+              {/* Sprint 9: Real-time Carrier Rates & Logistics Options */}
+              <div className="bg-white rounded-2xl shadow-sm border border-stone-200/80 p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 pb-3 border-b border-stone-100">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-7 h-7 rounded-full bg-stone-100 flex items-center justify-center text-stone-800">
+                      <Icon name="truck" className="w-4 h-4" />
+                    </span>
+                    <h3 className="text-sm font-serif font-bold text-stone-900">
+                      Delivery & Carrier Rates
+                    </h3>
+                  </div>
+                  {/* Destination Quick Selector */}
+                  <div className="flex items-center space-x-2 mt-2 sm:mt-0 text-xs">
+                    <select
+                      value={destCountry}
+                      onChange={(e) => {
+                        setDestCountry(e.target.value);
+                        fetchShippingRates(cart?.id, e.target.value, destPostalCode);
+                      }}
+                      className="px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg font-medium text-stone-700"
+                    >
+                      <option value="US">United States (Domestic)</option>
+                      <option value="CA">Canada</option>
+                      <option value="GB">United Kingdom</option>
+                      <option value="FR">France</option>
+                      <option value="AE">United Arab Emirates</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Postal Code"
+                      value={destPostalCode}
+                      onChange={(e) => setDestPostalCode(e.target.value)}
+                      onBlur={() => fetchShippingRates(cart?.id, destCountry, destPostalCode)}
+                      className="w-24 px-2.5 py-1.5 bg-stone-50 border border-stone-200 rounded-lg text-stone-700 font-mono text-center"
+                    />
+                  </div>
+                </div>
+
+                {shippingLoading ? (
+                  <div className="py-6 text-center text-xs text-stone-500 font-serif italic">
+                    Querying logistics carriers and smart rate cards...
+                  </div>
+                ) : shippingRates.length === 0 ? (
+                  <div className="py-4 text-xs text-stone-500 text-center">
+                    Enter your postal code to view live courier rate options.
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {shippingRates.map((quote) => {
+                      const isSelected = selectedShippingQuote?.quote_id === quote.quote_id;
+                      return (
+                        <div
+                          key={quote.quote_id}
+                          onClick={() => setSelectedShippingQuote(quote)}
+                          className={`cursor-pointer p-4 rounded-xl border transition-all flex items-start justify-between ${
+                            isSelected
+                              ? 'bg-stone-900 text-white border-stone-900 shadow-sm'
+                              : 'bg-stone-50/70 text-stone-800 border-stone-200 hover:border-stone-400'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-bold uppercase tracking-wide">
+                                {quote.service_level.replace('_', ' ')}
+                              </span>
+                              {isSelected && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                              )}
+                            </div>
+                            <p className={`text-[11px] mt-1 ${isSelected ? 'text-stone-300' : 'text-stone-500'}`}>
+                              {quote.carrier_name} · Est. {quote.estimated_days} business days
+                            </p>
+                          </div>
+                          <span className={`font-mono text-sm font-bold ${isSelected ? 'text-white' : 'text-stone-900'}`}>
+                            ${parseFloat(quote.amount).toFixed(2)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Curated Promotion Offers */}
               {publicCoupons.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-stone-200/80 p-5">
@@ -479,11 +602,11 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span className="font-mono font-medium text-stone-900">
-                      ${parseFloat(breakdown?.subtotal || '0').toFixed(2)}
+                      ${subtotal.toFixed(2)}
                     </span>
                   </div>
 
-                  {parseFloat(breakdown?.discount_total || '0') > 0 && (
+                  {discount > 0 && (
                     <div className="flex justify-between text-emerald-700 font-medium">
                       <span className="flex items-center">
                         <span>Discount</span>
@@ -493,18 +616,21 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                           </span>
                         )}
                       </span>
-                      <span className="font-mono">-${parseFloat(breakdown!.discount_total).toFixed(2)}</span>
+                      <span className="font-mono">-${discount.toFixed(2)}</span>
                     </div>
                   )}
 
                   <div className="flex justify-between">
-                    <span>Estimated Shipping</span>
-                    <span className="font-mono font-medium text-stone-900">
-                      {parseFloat(breakdown?.shipping_total || '0') === 0 ? (
-                        <span className="text-stone-500 font-normal">Calculated at checkout</span>
-                      ) : (
-                        `$${parseFloat(breakdown!.shipping_total).toFixed(2)}`
+                    <span>
+                      Delivery Courier
+                      {selectedShippingQuote && (
+                        <span className="block text-[11px] text-stone-400">
+                          {selectedShippingQuote.carrier_name} ({selectedShippingQuote.service_level})
+                        </span>
                       )}
+                    </span>
+                    <span className="font-mono font-medium text-stone-900">
+                      ${effectiveShipping.toFixed(2)}
                     </span>
                   </div>
 
@@ -516,7 +642,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                       )}
                     </span>
                     <span className="font-mono font-medium text-stone-900">
-                      ${parseFloat(breakdown?.tax_total || '0').toFixed(2)}
+                      ${tax.toFixed(2)}
                     </span>
                   </div>
 
@@ -525,10 +651,10 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                     <span className="text-base font-serif font-bold text-stone-900">Grand Total</span>
                     <div className="text-right">
                       <span className="text-2xl font-serif font-bold text-stone-900 font-mono">
-                        ${parseFloat(breakdown?.grand_total || '0').toFixed(2)}
+                        ${dynamicGrandTotal}
                       </span>
                       <p className="text-[11px] text-stone-400 uppercase tracking-wider mt-0.5">
-                        {breakdown?.currency || 'USD'} · Taxes included
+                        {breakdown?.currency || 'USD'} · Taxes & delivery included
                       </p>
                     </div>
                   </div>
@@ -571,7 +697,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
           </div>
         )}
 
-        {/* Modal: Checkout Bridge (Preparing for Sprint 9 & 10) */}
+        {/* Modal: Checkout Bridge (Preparing for Sprint 10) */}
         {checkoutModalOpen && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 sm:p-8 border border-stone-200">
@@ -583,17 +709,25 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
               </h3>
               <p className="text-stone-600 text-sm mb-4 leading-relaxed">
                 Your luxury bag items and pricing of{' '}
-                <strong className="text-stone-900 font-mono">${breakdown?.grand_total}</strong> have been
-                validated against live atelier inventory and price protection rules.
+                <strong className="text-stone-900 font-mono">${dynamicGrandTotal}</strong> have been
+                validated against live atelier inventory, delivery logistics, and price protection rules.
               </p>
-              <div className="bg-stone-50 rounded-xl p-4 border border-stone-200 mb-6 text-xs text-stone-600 space-y-1">
+              <div className="bg-stone-50 rounded-xl p-4 border border-stone-200 mb-6 text-xs text-stone-600 space-y-1.5">
                 <div className="flex justify-between">
                   <span>Session / Cart ID:</span>
                   <span className="font-mono">{cart?.id}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Items:</span>
-                  <span>{breakdown?.item_count} units</span>
+                  <span>Pieces Selected:</span>
+                  <span>{breakdown?.item_count} items</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Selected Courier:</span>
+                  <span className="font-semibold">{selectedShippingQuote ? `${selectedShippingQuote.carrier_name} (${selectedShippingQuote.service_level})` : 'Standard Delivery'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Rate Quote ID:</span>
+                  <span className="font-mono text-[11px]">{selectedShippingQuote?.quote_id || 'RQ-PENDING'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Applied Promotion:</span>

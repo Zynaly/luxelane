@@ -21,7 +21,7 @@
 | 7 | Reservations, Allocation & Smart Routing | 2 | ✅ Complete | ██████████ 100% |
 | 8 | Cart, Pricing & Promotions | 12 | ✅ Complete | ██████████ 100% |
 
-| 9 | Shipping Rates & Packing | 4 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 9 | Shipping Rates & Packing | 4 | ✅ Complete | ██████████ 100% |
 | 10 | Orders & Checkout Orchestration | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 11 | Online Payments & Webhooks | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 12 | Ledger, Escrow, Wallet & COD | 7 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -259,18 +259,18 @@
 
 ### Tasks
 
-- [ ] **S9-T1** Create `shipping` app
-- [ ] **S9-T2** `Carrier`, `CarrierCredential` (encrypted) models
-- [ ] **S9-T3** `ShippingZone`, `ShippingRateCard`, `RateQuote` models
-- [ ] **S9-T4** Migrations
-- [ ] **S9-T5** `shipping.services.rates.get_quotes()` — fan-out to EasyPost/Shippo (2s timeout, `concurrent.futures`) + flat-rate fallback
-- [ ] **S9-T6** `CarrierViewSet` — public list
-- [ ] **S9-T7** `AdminCarrierCredentialViewSet`
-- [ ] **S9-T8** `CheckoutRatesView` — fan-out + persist `RateQuote` rows
-- [ ] **S9-T9** `ShippingRateCardViewSet`
-- [ ] **S9-T10** Wire all Sprint 9 URLs
+- [x] **S9-T1** Create `shipping` app
+- [x] **S9-T2** `Carrier`, `CarrierCredential` (encrypted) models
+- [x] **S9-T3** `ShippingZone`, `ShippingRateCard`, `RateQuote` models
+- [x] **S9-T4** Migrations
+- [x] **S9-T5** `shipping.services.rates.get_quotes()` — fan-out to EasyPost/Shippo (2s timeout, `concurrent.futures`) + flat-rate fallback
+- [x] **S9-T6** `CarrierViewSet` — public list
+- [x] **S9-T7** `AdminCarrierCredentialViewSet`
+- [x] **S9-T8** `CheckoutRatesView` — fan-out + persist `RateQuote` rows
+- [x] **S9-T9** `ShippingRateCardViewSet`
+- [x] **S9-T10** Wire all Sprint 9 URLs
 
-**S9 Status: ⏳ Pending**
+**S9 Status: ✅ Complete** — 8/8 shipping unit tests passing · 140/140 project tests passing · Frontend CartPage & API integrated
 
 ---
 

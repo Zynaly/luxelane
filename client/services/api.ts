@@ -1569,6 +1569,98 @@ export const TaxAPI = {
   },
 };
 
+// ── Sprint 9: Shipping Rates & Packing Interfaces & APIs ─────────────────────
+export interface Carrier {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+  tracking_url_template?: string;
+  created_at: string;
+}
+
+export interface ShippingZone {
+  id: string;
+  name: string;
+  countries: string[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShippingRateCard {
+  id: string;
+  zone: string;
+  zone_name: string;
+  vendor: string | null;
+  vendor_name: string | null;
+  service_level: string;
+  base_rate: string;
+  per_kg_rate: string;
+  min_days: number;
+  max_days: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RateQuote {
+  id: string;
+  cart_or_order_ref: string;
+  carrier_code: string;
+  carrier_name: string;
+  service_level: string;
+  amount: string;
+  currency: string;
+  quote_id: string;
+  estimated_days: number;
+  expires_at: string;
+  redeemed: boolean;
+  metadata?: Record<string, any>;
+}
+
+export interface CheckoutRatesRequest {
+  cart_id?: string;
+  shipping_address_id?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  postal_code?: string;
+  line1?: string;
+}
+
+export const ShippingAPI = {
+  getCarriers: async (): Promise<Carrier[]> => {
+    const res = await apiRequest<any>('/shipping/carriers/');
+    return res.results || res || [];
+  },
+  getCheckoutRates: async (data: CheckoutRatesRequest): Promise<RateQuote[]> => {
+    const res = await apiRequest<any>('/checkout/rates/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.results || res || [];
+  },
+  getRateCards: async (): Promise<ShippingRateCard[]> => {
+    const res = await apiRequest<any>('/shipping/rate-cards/');
+    return res.results || res || [];
+  },
+  getZones: async (): Promise<ShippingZone[]> => {
+    const res = await apiRequest<any>('/shipping/zones/');
+    return res.results || res || [];
+  },
+  adminGetCredentials: async (): Promise<any[]> => {
+    const res = await apiRequest<any>('/admin/shipping/carrier-credentials/');
+    return res.results || res || [];
+  },
+  adminCreateCredential: async (data: any): Promise<any> => {
+    return apiRequest<any>('/admin/shipping/carrier-credentials/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1593,8 +1685,10 @@ export default {
   Cart: CartAPI,
   Coupon: CouponAPI,
   Tax: TaxAPI,
+  Shipping: ShippingAPI,
   Token: TokenService,
 };
+
 
 
 
