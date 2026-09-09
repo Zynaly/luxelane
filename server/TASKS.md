@@ -21,10 +21,10 @@
 | 7 | Reservations, Allocation & Smart Routing | 2 | ✅ Complete | ██████████ 100% |
 | 8 | Cart, Pricing & Promotions | 12 | ✅ Complete | ██████████ 100% |
 | 9 | Shipping Rates & Packing | 4 | ✅ Complete | ██████████ 100% |
-| 10 | Orders & Checkout Orchestration | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 11 | Online Payments & Webhooks | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 12 | Ledger, Escrow, Wallet & COD | 7 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 13 | Shipments, Labels & Tracking | 8 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 10 | Orders & Checkout Orchestration | 12 | ✅ Complete | ██████████ 100% |
+| 11 | Online Payments & Webhooks | 10 | ✅ Complete | ██████████ 100% |
+| 12 | Ledger, Escrow, Wallet & COD | 7 | ✅ Complete | ██████████ 100% |
+| 13 | Shipments, Labels & Tracking | 8 | ✅ Complete | ██████████ 100% |
 | 14 | Returns, Refunds, Reviews & Q&A | 12 | ✅ Complete | ██████████ 100% |
 | 15 | Payouts, Reconciliation & Admin Reporting | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 16 | Launch Hardening | — | ⏳ Pending | ░░░░░░░░░░ 0% |
