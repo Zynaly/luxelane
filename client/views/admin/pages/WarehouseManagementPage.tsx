@@ -4,10 +4,12 @@ import API, {
   InventoryItem,
   StockTransfer,
   PurchaseOrder,
+  InventoryReservation,
+  AllocationPreviewResponse,
 } from '../../../services/api';
 import { Icon } from '../../../components/Icon';
 
-type ActiveTab = 'facilities' | 'inventory' | 'low_stock' | 'transfers' | 'purchase_orders';
+type ActiveTab = 'facilities' | 'inventory' | 'low_stock' | 'transfers' | 'purchase_orders' | 'reservations_routing';
 
 export const WarehouseManagementPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('facilities');
@@ -20,6 +22,7 @@ export const WarehouseManagementPage: React.FC = () => {
   const [lowStockList, setLowStockList] = useState<InventoryItem[]>([]);
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [reservations, setReservations] = useState<InventoryReservation[]>([]);
 
   // Filtering states
   const [searchQuery, setSearchQuery] = useState('');
@@ -67,6 +70,16 @@ export const WarehouseManagementPage: React.FC = () => {
     notes: '',
   });
 
+  // Sprint 7 Allocation Simulator State
+  const [allocForm, setAllocForm] = useState({
+    variant_id: '',
+    quantity: 5,
+    latitude: 51.5074,
+    longitude: -0.1278,
+  });
+  const [allocResult, setAllocResult] = useState<AllocationPreviewResponse | null>(null);
+  const [simLoading, setSimLoading] = useState(false);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
@@ -76,22 +89,27 @@ export const WarehouseManagementPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [whData, lowData, transferData, poData] = await Promise.all([
-        API.Warehouse.list(),
+      const [whData, lowData, transferData, poData, resData] = await Promise.all([
+        API.Warehouse.list().catch(() => []),
         API.Inventory.getLowStock().catch(() => []),
         API.StockTransfer.list().catch(() => []),
         API.PurchaseOrder.list().catch(() => []),
+        API.Reservation.adminList().catch(() => []),
       ]);
       setWarehouses(whData || []);
       setLowStockList(lowData || []);
       setTransfers(transferData || []);
       setPurchaseOrders(poData || []);
+      setReservations(resData || []);
 
       // If there are warehouses, load inventory
       if (whData && whData.length > 0) {
         const firstWhId = whData[0].id;
         const inv = await API.Warehouse.getInventory(firstWhId).catch(() => []);
         setInventoryList(inv || []);
+        if (inv && inv.length > 0) {
+          setAllocForm((prev) => ({ ...prev, variant_id: inv[0].variant }));
+        }
       }
     } catch (err: any) {
       console.error('Failed loading warehouse operations data:', err);
@@ -109,7 +127,6 @@ export const WarehouseManagementPage: React.FC = () => {
   const handleWarehouseFilterChange = async (whId: string) => {
     setSelectedWarehouseFilter(whId);
     if (whId === 'all') {
-      // aggregate or load first
       if (warehouses.length > 0) {
         const inv = await API.Warehouse.getInventory(warehouses[0].id).catch(() => []);
         setInventoryList(inv || []);
@@ -216,7 +233,6 @@ export const WarehouseManagementPage: React.FC = () => {
       });
       showToast(`Stock updated: New on-hand: ${res.current_on_hand}, Available: ${res.available}`);
       setShowAdjustModal(false);
-      // Reload active inventory and low stock
       if (adjustForm.warehouse_id) {
         const inv = await API.Warehouse.getInventory(adjustForm.warehouse_id);
         setInventoryList(inv || []);
@@ -302,7 +318,6 @@ export const WarehouseManagementPage: React.FC = () => {
       const res = await API.StockTransfer.receive(transferId);
       setTransfers(transfers.map((t) => (t.id === res.id ? res : t)));
       showToast('Transfer received and stock credited.');
-      // Refresh inventory
       loadData();
     } catch (err: any) {
       showToast(err.message || 'Failed to receive transfer', 'error');
@@ -360,6 +375,29 @@ export const WarehouseManagementPage: React.FC = () => {
     }
   };
 
+  // Sprint 7 Allocation Simulator Execution
+  const handleRunAllocationSim = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!allocForm.variant_id) {
+      showToast('Variant UUID is required for allocation simulation', 'error');
+      return;
+    }
+    setSimLoading(true);
+    try {
+      const res = await API.Allocation.preview({
+        items: [{ variant_id: allocForm.variant_id, quantity: Number(allocForm.quantity) }],
+        latitude: Number(allocForm.latitude),
+        longitude: Number(allocForm.longitude),
+      });
+      setAllocResult(res);
+      showToast('Allocation simulation evaluated successfully.');
+    } catch (err: any) {
+      showToast(err.message || 'Simulation failed', 'error');
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
   // Filtered inventories
   const filteredInventory = inventoryList.filter((inv) => {
     if (!searchQuery.trim()) return true;
@@ -369,6 +407,8 @@ export const WarehouseManagementPage: React.FC = () => {
       (inv.product_title && inv.product_title.toLowerCase().includes(q))
     );
   });
+
+  const activeReservationsCount = reservations.filter((r) => r.status === 'HELD').length;
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-gray-50 min-h-screen">
@@ -392,11 +432,11 @@ export const WarehouseManagementPage: React.FC = () => {
           <div className="flex items-center space-x-3 mb-1">
             <h1 className="text-3xl font-serif font-bold text-gray-900">Warehouse & Inventory Operations</h1>
             <span className="px-3 py-1 bg-amber-100 text-amber-900 text-xs font-semibold rounded-full border border-amber-200">
-              Sprint 6 Core
+              Sprint 7 Active
             </span>
           </div>
           <p className="text-sm text-gray-500">
-            Multi-node facility management, real-time stock levels, inter-warehouse transfers, and replenishment orders.
+            Multi-node facility management, real-time stock levels, smart Haversine routing, and transactional reservations.
           </p>
         </div>
 
@@ -429,17 +469,27 @@ export const WarehouseManagementPage: React.FC = () => {
       </div>
 
       {/* High-Level Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Facilities</p>
             <p className="text-2xl font-bold text-gray-900 mt-1">
               {warehouses.filter((w) => w.is_active).length}
-              <span className="text-xs font-normal text-gray-400 ml-1.5">/ {warehouses.length} total</span>
+              <span className="text-xs font-normal text-gray-400 ml-1.5">/ {warehouses.length}</span>
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <Icon name="warehouse" className="w-6 h-6" />
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Icon name="warehouse" className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Holds</p>
+            <p className="text-2xl font-bold text-amber-600 mt-1">{activeReservationsCount}</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-base">
+            🔒
           </div>
         </div>
 
@@ -448,7 +498,7 @@ export const WarehouseManagementPage: React.FC = () => {
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Low Stock Warnings</p>
             <p className="text-2xl font-bold text-rose-600 mt-1">{lowStockList.length}</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-lg">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-base">
             ⚠️
           </div>
         </div>
@@ -456,24 +506,24 @@ export const WarehouseManagementPage: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Active Transfers</p>
-            <p className="text-2xl font-bold text-amber-600 mt-1">
+            <p className="text-2xl font-bold text-gray-900 mt-1">
               {transfers.filter((t) => t.status === 'in_transit' || t.status === 'pending').length}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <Icon name="truck" className="w-6 h-6" />
+          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
+            <Icon name="truck" className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Open Purchase Orders</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Open POs</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">
               {purchaseOrders.filter((p) => p.status === 'ordered' || p.status === 'partially_received').length}
             </p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <Icon name="package" className="w-6 h-6" />
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <Icon name="package" className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -500,6 +550,22 @@ export const WarehouseManagementPage: React.FC = () => {
           }`}
         >
           Live Inventory ({inventoryList.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reservations_routing')}
+          className={`pb-3 px-4 text-sm font-medium border-b-2 flex items-center transition ${
+            activeTab === 'reservations_routing'
+              ? 'border-amber-600 text-amber-700 font-semibold'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+          }`}
+        >
+          🔒 Reservations & Smart Routing
+          {activeReservationsCount > 0 && (
+            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 font-bold">
+              {activeReservationsCount}
+            </span>
+          )}
         </button>
 
         <button
@@ -600,6 +666,9 @@ export const WarehouseManagementPage: React.FC = () => {
                       <p>
                         {wh.city}, {wh.state} {wh.postal_code}
                       </p>
+                      <p className="text-[11px] text-gray-400 font-mono pt-1">
+                        Coords: {wh.latitude || '0.00'}, {wh.longitude || '0.00'}
+                      </p>
                     </div>
                   </div>
 
@@ -683,8 +752,8 @@ export const WarehouseManagementPage: React.FC = () => {
                   <th className="px-6 py-3.5">SKU & Item</th>
                   <th className="px-6 py-3.5">Facility</th>
                   <th className="px-6 py-3.5 text-right">On Hand</th>
-                  <th className="px-6 py-3.5 text-right">Reserved</th>
-                  <th className="px-6 py-3.5 text-right">Available</th>
+                  <th className="px-6 py-3.5 text-right">Reserved Hold</th>
+                  <th className="px-6 py-3.5 text-right">Available to Promise</th>
                   <th className="px-6 py-3.5 text-right">Threshold</th>
                   <th className="px-6 py-3.5 text-center">Status</th>
                   <th className="px-6 py-3.5 text-right">Action</th>
@@ -708,7 +777,7 @@ export const WarehouseManagementPage: React.FC = () => {
                         </td>
                         <td className="px-6 py-4 text-xs font-medium text-gray-600">{item.warehouse_name}</td>
                         <td className="px-6 py-4 text-right font-semibold text-gray-900">{item.on_hand}</td>
-                        <td className="px-6 py-4 text-right text-gray-500 font-medium">{item.reserved_cache}</td>
+                        <td className="px-6 py-4 text-right text-amber-600 font-semibold">{item.reserved_cache}</td>
                         <td className="px-6 py-4 text-right font-bold text-emerald-600">{item.available}</td>
                         <td className="px-6 py-4 text-right text-gray-400 text-xs">{item.reorder_threshold}</td>
                         <td className="px-6 py-4 text-center">
@@ -742,7 +811,212 @@ export const WarehouseManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: Low Stock Warnings */}
+      {/* TAB 3: Reservations & Smart Routing (Sprint 7) */}
+      {!loading && activeTab === 'reservations_routing' && (
+        <div className="space-y-8">
+          {/* Smart Allocation Simulator */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 border-b border-gray-100 gap-2 mb-6">
+              <div>
+                <h3 className="text-lg font-serif font-bold text-gray-900">⚡ Haversine Smart Allocation Engine Simulator</h3>
+                <p className="text-xs text-gray-500">
+                  Calculates Great-Circle distances, prioritizes single-facility fulfillment, and outputs fulfillment splits.
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold rounded-full self-start">
+                Pure Function (No Writes)
+              </span>
+            </div>
+
+            <form onSubmit={handleRunAllocationSim} className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm mb-6">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Product Variant UUID
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Paste Variant UUID"
+                  value={allocForm.variant_id}
+                  onChange={(e) => setAllocForm({ ...allocForm, variant_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl font-mono text-xs focus:ring-2 focus:ring-gray-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Requested Quantity
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={allocForm.quantity}
+                  onChange={(e) => setAllocForm({ ...allocForm, quantity: Number(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-gray-900 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Destination Lat / Lon
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    step="0.0001"
+                    placeholder="Lat"
+                    value={allocForm.latitude}
+                    onChange={(e) => setAllocForm({ ...allocForm, latitude: Number(e.target.value) })}
+                    className="w-1/2 px-2 py-2 border border-gray-200 rounded-xl text-xs"
+                  />
+                  <input
+                    type="number"
+                    step="0.0001"
+                    placeholder="Lon"
+                    value={allocForm.longitude}
+                    onChange={(e) => setAllocForm({ ...allocForm, longitude: Number(e.target.value) })}
+                    className="w-1/2 px-2 py-2 border border-gray-200 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="sm:col-span-4 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={simLoading}
+                  className="px-6 py-2.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center"
+                >
+                  {simLoading ? 'Calculating Geodesic Routes...' : 'Run Smart Allocation Evaluation'}
+                </button>
+              </div>
+            </form>
+
+            {allocResult && (
+              <div className="mt-4 p-5 bg-gray-50 rounded-xl border border-gray-200 text-xs">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <span
+                      className={`px-3 py-1 font-bold rounded-full ${
+                        allocResult.feasible
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}
+                    >
+                      {allocResult.feasible ? '✓ FEASIBLE' : '⚠️ UNFEASIBLE (DEFICIT)'}
+                    </span>
+                    <span className="font-semibold text-gray-700">
+                      Total Shipping Splits: {allocResult.total_splits}
+                    </span>
+                  </div>
+                </div>
+
+                {allocResult.splits.map((split, idx) => (
+                  <div key={idx} className="bg-white p-4 rounded-xl border border-gray-200 mb-3 shadow-sm">
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="font-bold text-gray-900">
+                        Facility: {split.warehouse_name}
+                      </p>
+                      <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 font-mono rounded font-semibold text-[11px]">
+                        {split.distance_km} km away
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-gray-100 text-gray-600">
+                      {split.items.map((itm, i) => (
+                        <li key={i} className="py-1.5 flex justify-between">
+                          <span>
+                            <strong className="font-mono text-gray-900">{itm.sku}</strong> — {itm.product_title}
+                          </span>
+                          <span className="font-bold text-emerald-600">Allocated: {itm.quantity} units</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+
+                {allocResult.unallocated && allocResult.unallocated.length > 0 && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 mt-2">
+                    <p className="font-bold mb-1">Unallocated Shortages:</p>
+                    {allocResult.unallocated.map((un, idx) => (
+                      <p key={idx}>
+                        SKU {un.sku}: Needed {un.requested}, Allocated {un.allocated} (Deficit: -{un.deficit})
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Active / Historical Reservations Ledger */}
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Transactional Inventory Reservations (15-Min TTL Holds)</h3>
+                <p className="text-xs text-gray-500">
+                  Holds created during checkout. Swept automatically every 60s upon expiration.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
+                <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3.5">Reservation ID</th>
+                    <th className="px-6 py-3.5">SKU & Item</th>
+                    <th className="px-6 py-3.5">Facility</th>
+                    <th className="px-6 py-3.5 text-right">Held Quantity</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5">Hold Expiration</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-gray-700">
+                  {reservations.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-400 text-sm">
+                        No reservation holds recorded. Holds are created dynamically when customers proceed to checkout.
+                      </td>
+                    </tr>
+                  ) : (
+                    reservations.map((res) => (
+                      <tr key={res.id} className="hover:bg-gray-50/70 transition">
+                        <td className="px-6 py-4 font-mono text-xs text-gray-500">{res.id.slice(0, 8)}...</td>
+                        <td className="px-6 py-4">
+                          <p className="font-mono font-bold text-gray-900 text-xs">{res.variant_sku}</p>
+                          <p className="text-xs text-gray-500">{res.product_title}</p>
+                        </td>
+                        <td className="px-6 py-4 text-xs font-medium text-gray-700">{res.warehouse_name}</td>
+                        <td className="px-6 py-4 text-right font-bold text-amber-600">{res.quantity}</td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-2.5 py-1 text-xs font-bold rounded-full ${
+                              res.status === 'COMMITTED'
+                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                : res.status === 'HELD'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : res.status === 'EXPIRED'
+                                ? 'bg-rose-50 text-rose-800 border border-rose-200'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {res.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs text-gray-500 font-mono">
+                          {new Date(res.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: Low Stock Warnings */}
       {!loading && activeTab === 'low_stock' && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-gray-200 flex items-center justify-between">
@@ -804,7 +1078,7 @@ export const WarehouseManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 4: Stock Transfers */}
+      {/* TAB 5: Stock Transfers */}
       {!loading && activeTab === 'transfers' && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-gray-200 flex items-center justify-between">
@@ -893,7 +1167,7 @@ export const WarehouseManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: Purchase Orders */}
+      {/* TAB 6: Purchase Orders */}
       {!loading && activeTab === 'purchase_orders' && (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-5 border-b border-gray-200 flex items-center justify-between">

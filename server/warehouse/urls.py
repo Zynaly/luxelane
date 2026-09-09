@@ -16,7 +16,10 @@ from warehouse.views import (
     PurchaseOrderReceiveView,
     LowStockView,
     VariantAvailabilityView,
+    AllocationPreviewView,
+    AdminInventoryReservationViewSet,
 )
+
 
 # ── Warehouse router ──────────────────────────────────────────────────────────
 warehouse_router = DefaultRouter()
@@ -35,8 +38,10 @@ inventory_urlpatterns = [
     path("adjust/", InventoryAdjustView.as_view(), name="inventory-adjust"),
     path("bulk-update/", InventoryBulkUpdateView.as_view(), name="inventory-bulk-update"),
     path("low-stock/", LowStockView.as_view(), name="inventory-low-stock"),
+    path("allocate/preview/", AllocationPreviewView.as_view(), name="inventory-allocate-preview"),
     path("variant/<uuid:id>/availability/", VariantAvailabilityView.as_view(), name="variant-availability"),
 ]
+
 
 # ── Stock movement router ─────────────────────────────────────────────────────
 movement_router = DefaultRouter()
@@ -55,3 +60,9 @@ purchase_order_urlpatterns = [
     path("<uuid:id>/receive/", PurchaseOrderReceiveView.as_view(), name="purchase-order-receive"),
     path("", include(po_router.urls)),
 ]
+
+# ── Admin Inventory Reservation router (Sprint 7) ─────────────────────────────
+admin_reservation_router = DefaultRouter()
+admin_reservation_router.register(r"inventory-reservations", AdminInventoryReservationViewSet, basename="admin-inventory-reservation")
+warehouse_admin_urls = admin_reservation_router.urls
+

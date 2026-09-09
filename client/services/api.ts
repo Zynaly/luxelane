@@ -1312,6 +1312,79 @@ export const PurchaseOrderAPI = {
   },
 };
 
+// ── Sprint 7: Reservations & Allocation Types & APIs ──────────────────────────
+export interface InventoryReservation {
+  id: string;
+  inventory: string;
+  warehouse_id: string;
+  warehouse_name: string;
+  variant_sku: string;
+  product_title: string;
+  cart_item_id?: string | null;
+  order_item_id?: string | null;
+  quantity: number;
+  status: 'HELD' | 'COMMITTED' | 'RELEASED' | 'EXPIRED';
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AllocationItemRequest {
+  variant_id: string;
+  quantity: number;
+}
+
+export interface AllocationPreviewRequest {
+  items: AllocationItemRequest[];
+  shipping_address_id?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface AllocationItemResponse {
+  variant_id: string;
+  sku: string;
+  product_title: string;
+  quantity: number;
+}
+
+export interface AllocationSplit {
+  warehouse_id: string;
+  warehouse_name: string;
+  distance_km: number;
+  items: AllocationItemResponse[];
+}
+
+export interface AllocationPreviewResponse {
+  splits: AllocationSplit[];
+  total_splits: number;
+  feasible: boolean;
+  unallocated?: Array<{
+    variant_id: string;
+    sku: string;
+    requested: number;
+    allocated: number;
+    deficit: number;
+  }>;
+}
+
+export const AllocationAPI = {
+  preview: async (data: AllocationPreviewRequest): Promise<AllocationPreviewResponse> => {
+    return apiRequest<AllocationPreviewResponse>('/inventory/allocate/preview/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+export const ReservationAPI = {
+  adminList: async (status?: string): Promise<InventoryReservation[]> => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await apiRequest<any>(`/admin/inventory-reservations/${query}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1331,6 +1404,9 @@ export default {
   Inventory: InventoryAPI,
   StockTransfer: StockTransferAPI,
   PurchaseOrder: PurchaseOrderAPI,
+  Allocation: AllocationAPI,
+  Reservation: ReservationAPI,
   Token: TokenService,
 };
+
 

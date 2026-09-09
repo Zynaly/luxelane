@@ -18,8 +18,9 @@
 | 4 | Catalog Core & Moderation | 12 | ✅ Complete | ██████████ 100% |
 | 5 | Variants, Attributes & Search | 9 | ✅ Complete | ██████████ 100% |
 | 6 | Warehouse & Inventory Core | 15 | ✅ Complete | ██████████ 100% |
-| 7 | Reservations, Allocation & Smart Routing | 2 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 7 | Reservations, Allocation & Smart Routing | 2 | ✅ Complete | ██████████ 100% |
 | 8 | Cart, Pricing & Promotions | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
+
 | 9 | Shipping Rates & Packing | 4 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 10 | Orders & Checkout Orchestration | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 11 | Online Payments & Webhooks | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -213,16 +214,17 @@
 
 ### Tasks
 
-- [ ] **S7-T1** `InventoryReservation` model — HELD/COMMITTED/RELEASED/EXPIRED, 15-min TTL
-- [ ] **S7-T2** Migrations
-- [ ] **S7-T3** `warehouse.services.allocation.preview()` — Haversine routing (pure fn, no writes)
-- [ ] **S7-T4** `reserve()`, `commit()`, `release()` internal service functions
-- [ ] **S7-T5** `AllocationPreviewView (APIView.post)`
-- [ ] **S7-T6** `ReservationSweeperTask` — Celery beat every 60s, releases expired HELD rows
-- [ ] **S7-T7** `AdminInventoryReservationViewSet` — debug/support list
-- [ ] **S7-T8** Wire Sprint 7 URLs
+- [x] **S7-T1** `InventoryReservation` model — HELD/COMMITTED/RELEASED/EXPIRED, 15-min TTL
+- [x] **S7-T2** Migrations
+- [x] **S7-T3** `warehouse.services.allocation.preview()` — Haversine routing (pure fn, no writes)
+- [x] **S7-T4** `reserve()`, `commit()`, `release()` internal service functions
+- [x] **S7-T5** `AllocationPreviewView (APIView.post)`
+- [x] **S7-T6** `ReservationSweeperTask` — Celery beat every 60s, releases expired HELD rows
+- [x] **S7-T7** `AdminInventoryReservationViewSet` — debug/support list
+- [x] **S7-T8** Wire Sprint 7 URLs
 
-**S7 Status: ⏳ Pending**
+**S7 Status: ✅ Complete**
+
 
 ---
 

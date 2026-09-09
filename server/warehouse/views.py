@@ -40,6 +40,7 @@ from warehouse.models import (
     StockTransferItem,
     PurchaseOrder,
     PurchaseOrderItem,
+    InventoryReservation,
     StaffRole,
     MovementType,
     TransferStatus,
@@ -56,8 +57,12 @@ from warehouse.serializers import (
     PurchaseOrderSerializer,
     PurchaseOrderReceiveSerializer,
     VariantAvailabilitySerializer,
+    AllocationPreviewRequestSerializer,
+    AllocationPreviewResponseSerializer,
+    InventoryReservationSerializer,
 )
 from warehouse.services import stock as stock_service
+from warehouse.services import allocation as allocation_service
 from catalog.models import ProductVariant
 
 
@@ -469,3 +474,62 @@ class VariantAvailabilityView(APIView):
         }
 
         return Response(VariantAvailabilitySerializer(data).data, status=status.HTTP_200_OK)
+
+
+# ── Sprint 7: Allocation & Reservation Views ──────────────────────────────────
+
+@extend_schema(tags=["Warehouse — Allocation"])
+class AllocationPreviewView(APIView):
+    """
+    POST /inventory/allocate/preview/
+    Pure evaluation smart-routing allocation preview. Computes fulfillment splits
+    based on proximity (Haversine distance) and inventory availability without mutating DB.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=AllocationPreviewRequestSerializer,
+        responses={200: AllocationPreviewResponseSerializer},
+    )
+    def post(self, request):
+        serializer = AllocationPreviewRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        coords = None
+        if data.get("latitude") is not None and data.get("longitude") is not None:
+            coords = (data["latitude"], data["longitude"])
+
+        result = allocation_service.preview(
+            items=data["items"],
+            shipping_address_id=data.get("shipping_address_id"),
+            destination_coords=coords,
+        )
+
+        response_serializer = AllocationPreviewResponseSerializer(result)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Admin — Inventory Reservations"])
+class AdminInventoryReservationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """
+    GET /admin/inventory-reservations/
+    Platform Admin view for inspecting active/expired/committed inventory reservations.
+    """
+    permission_classes = [IsPlatformAdmin]
+    serializer_class = InventoryReservationSerializer
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    filterset_fields = ["status", "inventory__warehouse"]
+    search_fields = ["inventory__variant__sku", "inventory__variant__product__title"]
+
+    def get_queryset(self):
+        return (
+            InventoryReservation.objects.select_related(
+                "inventory",
+                "inventory__warehouse",
+                "inventory__variant",
+                "inventory__variant__product",
+            )
+            .order_by("-created_at")
+        )
+

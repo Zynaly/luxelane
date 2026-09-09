@@ -43,7 +43,15 @@ class POStatus(models.TextChoices):
     CANCELLED          = "cancelled",          "Cancelled"
 
 
+class ReservationStatus(models.TextChoices):
+    HELD      = "HELD",      "Held"
+    COMMITTED = "COMMITTED", "Committed"
+    RELEASED  = "RELEASED",  "Released"
+    EXPIRED   = "EXPIRED",   "Expired"
+
+
 # ── Warehouse ─────────────────────────────────────────────────────────────────
+
 
 class Warehouse(BaseModel):
     """
@@ -231,3 +239,34 @@ class PurchaseOrderItem(BaseModel):
 
     def __str__(self):
         return f"{self.variant.sku}: {self.qty_received}/{self.qty_ordered} @ ${self.unit_cost}"
+
+
+# ── Inventory Reservation ───────────────────────────────────────────────────────
+
+class InventoryReservation(BaseModel):
+    """
+    Temporary stock reservation (15-minute hold) to guarantee availability
+    during checkout without deducting from on_hand until order fulfillment.
+    """
+    inventory     = models.ForeignKey(Inventory, on_delete=models.CASCADE, related_name="reservations", db_index=True)
+    cart_item_id  = models.UUIDField(null=True, blank=True, db_index=True)
+    order_item_id = models.UUIDField(null=True, blank=True, db_index=True)
+    quantity      = models.PositiveIntegerField()
+    status        = models.CharField(
+        max_length=20,
+        choices=ReservationStatus.choices,
+        default=ReservationStatus.HELD,
+        db_index=True,
+    )
+    expires_at    = models.DateTimeField(db_index=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "expires_at"]),
+        ]
+
+    def __str__(self):
+        sku = getattr(getattr(self.inventory, "variant", None), "sku", "Item")
+        return f"Reservation {self.id}: {self.quantity}x {sku} ({self.status})"
+

@@ -18,9 +18,13 @@ from catalog.models import Category, Product, ProductVariant
 from warehouse.models import (
     Warehouse, WarehouseStaff, Inventory, StockMovement,
     StockTransfer, StockTransferItem, PurchaseOrder, PurchaseOrderItem,
-    StaffRole, MovementType, TransferStatus, POStatus,
+    InventoryReservation,
+    StaffRole, MovementType, TransferStatus, POStatus, ReservationStatus,
 )
 from warehouse.services import stock as stock_service
+from warehouse.services import reservation as reservation_service
+from warehouse.services import allocation as allocation_service
+
 
 
 def make_user(email, role=RoleEnum.CUSTOMER, **kwargs):
@@ -301,3 +305,186 @@ class VariantAvailabilityTests(TestCase):
         self.assertEqual(resp.data["sku"], "SKU-AVAIL-1")
         self.assertEqual(resp.data["total_available"], 45)  # 15 + 30
         self.assertEqual(len(resp.data["by_warehouse"]), 2)
+
+
+# ── Sprint 7: Inventory Reservation Tests ─────────────────────────────────────
+
+class InventoryReservationTests(TestCase):
+    def setUp(self):
+        self.owner = make_user("res_owner@test.com", role=RoleEnum.VENDOR_OWNER)
+        self.vendor = make_vendor(self.owner)
+        self.variant = make_variant(self.vendor, "SKU-RES-1")
+        self.wh = Warehouse.objects.create(name="Milan Hub", is_active=True)
+        self.inv = Inventory.objects.create(
+            warehouse=self.wh,
+            variant=self.variant,
+            on_hand=50,
+            reserved_cache=0,
+        )
+
+    def test_reserve_success(self):
+        res = reservation_service.reserve(self.inv, quantity=10, ttl_minutes=15)
+        self.assertEqual(res.status, ReservationStatus.HELD)
+        self.assertEqual(res.quantity, 10)
+        self.assertIsNotNone(res.expires_at)
+
+        # Inventory reserved_cache incremented, on_hand untouched
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.on_hand, 50)
+        self.assertEqual(self.inv.reserved_cache, 10)
+        self.assertEqual(self.inv.available, 40)
+
+    def test_reserve_insufficient_stock(self):
+        from rest_framework.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            reservation_service.reserve(self.inv, quantity=60)
+
+    def test_commit_reservation(self):
+        res = reservation_service.reserve(self.inv, quantity=15)
+        committed = reservation_service.commit(res)
+        self.assertEqual(committed.status, ReservationStatus.COMMITTED)
+
+    def test_release_reservation(self):
+        res = reservation_service.reserve(self.inv, quantity=20)
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.available, 30)
+
+        released = reservation_service.release(res)
+        self.assertEqual(released.status, ReservationStatus.RELEASED)
+
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.reserved_cache, 0)
+        self.assertEqual(self.inv.available, 50)
+
+    def test_sweep_expired_reservations(self):
+        import datetime
+        from django.utils import timezone
+
+        res = reservation_service.reserve(self.inv, quantity=25)
+        # Manually backdate expires_at to simulate expiry
+        res.expires_at = timezone.now() - datetime.timedelta(minutes=5)
+        res.save(update_fields=["expires_at"])
+
+        swept_count = reservation_service.sweep_expired_reservations()
+        self.assertEqual(swept_count, 1)
+
+        res.refresh_from_db()
+        self.assertEqual(res.status, ReservationStatus.EXPIRED)
+
+        self.inv.refresh_from_db()
+        self.assertEqual(self.inv.reserved_cache, 0)
+        self.assertEqual(self.inv.available, 50)
+
+
+# ── Sprint 7: Smart Routing & Allocation Tests ────────────────────────────────
+
+class SmartAllocationRoutingTests(TestCase):
+    def setUp(self):
+        self.owner = make_user("alloc_owner@test.com", role=RoleEnum.VENDOR_OWNER)
+        self.vendor = make_vendor(self.owner)
+        self.v1 = make_variant(self.vendor, "SKU-ALLOC-1")
+        self.v2 = make_variant(self.vendor, "SKU-ALLOC-2")
+
+        # Warehouse London (51.5074, -0.1278)
+        self.wh_london = Warehouse.objects.create(
+            name="London Vault",
+            latitude=51.5074,
+            longitude=-0.1278,
+            is_active=True,
+        )
+        # Warehouse Paris (48.8566, 2.3522)
+        self.wh_paris = Warehouse.objects.create(
+            name="Paris Atelier",
+            latitude=48.8566,
+            longitude=2.3522,
+            is_active=True,
+        )
+
+    def test_haversine_distance(self):
+        # Distance London to Paris is approximately 343 km
+        dist = allocation_service.haversine_distance(51.5074, -0.1278, 48.8566, 2.3522)
+        self.assertAlmostEqual(dist, 343.5, delta=10.0)
+
+    def test_single_source_fulfillment_chosen_nearest(self):
+        # London has both items: 10x v1, 10x v2
+        Inventory.objects.create(warehouse=self.wh_london, variant=self.v1, on_hand=10)
+        Inventory.objects.create(warehouse=self.wh_london, variant=self.v2, on_hand=10)
+
+        # Paris also has both: 20x v1, 20x v2
+        Inventory.objects.create(warehouse=self.wh_paris, variant=self.v1, on_hand=20)
+        Inventory.objects.create(warehouse=self.wh_paris, variant=self.v2, on_hand=20)
+
+        # Destination in UK (near London): (51.5000, -0.1000)
+        res = allocation_service.preview(
+            items=[{"variant_id": str(self.v1.id), "quantity": 5}, {"variant_id": str(self.v2.id), "quantity": 5}],
+            destination_coords=(51.5000, -0.1000),
+        )
+        self.assertTrue(res["feasible"])
+        self.assertEqual(res["total_splits"], 1)
+        self.assertEqual(res["splits"][0]["warehouse_id"], str(self.wh_london.id))
+
+    def test_multi_facility_split_when_single_warehouse_cannot_fulfill(self):
+        # London has 5x v1, 0x v2
+        Inventory.objects.create(warehouse=self.wh_london, variant=self.v1, on_hand=5)
+        # Paris has 0x v1, 10x v2
+        Inventory.objects.create(warehouse=self.wh_paris, variant=self.v2, on_hand=10)
+
+        res = allocation_service.preview(
+            items=[{"variant_id": str(self.v1.id), "quantity": 5}, {"variant_id": str(self.v2.id), "quantity": 5}],
+            destination_coords=(51.5000, -0.1000),
+        )
+        self.assertTrue(res["feasible"])
+        self.assertEqual(res["total_splits"], 2)
+
+    def test_unfeasible_deficit(self):
+        # Total network only has 3x v1
+        Inventory.objects.create(warehouse=self.wh_london, variant=self.v1, on_hand=3)
+
+        res = allocation_service.preview(
+            items=[{"variant_id": str(self.v1.id), "quantity": 10}],
+            destination_coords=(51.5000, -0.1000),
+        )
+        self.assertFalse(res["feasible"])
+        self.assertEqual(len(res["unallocated"]), 1)
+        self.assertEqual(res["unallocated"][0]["deficit"], 7)
+
+
+# ── Sprint 7: Allocation & Reservation Endpoints Tests ────────────────────────
+
+class AllocationEndpointTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = make_user("alloc_user@test.com", role=RoleEnum.CUSTOMER)
+        self.admin = make_user("alloc_admin@test.com", role=RoleEnum.PLATFORM_ADMIN)
+        self.owner = make_user("alloc_vend@test.com", role=RoleEnum.VENDOR_OWNER)
+        self.vendor = make_vendor(self.owner)
+        self.v1 = make_variant(self.vendor, "SKU-API-ALLOC-1")
+        self.wh = Warehouse.objects.create(name="Milan Hub", is_active=True, latitude=45.4642, longitude=9.1900)
+        self.inv = Inventory.objects.create(warehouse=self.wh, variant=self.v1, on_hand=30)
+        auth(self.client, self.user)
+
+    def test_allocation_preview_endpoint(self):
+        resp = self.client.post("/api/v1/inventory/allocate/preview/", {
+            "items": [{"variant_id": str(self.v1.id), "quantity": 5}],
+            "latitude": 45.4600,
+            "longitude": 9.1800,
+        }, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["feasible"])
+        self.assertEqual(resp.data["total_splits"], 1)
+
+    def test_admin_reservation_list_access(self):
+        # Create a reservation
+        reservation_service.reserve(self.inv, quantity=5)
+
+        # Customer access forbidden
+        resp = self.client.get("/api/v1/admin/inventory-reservations/")
+        self.assertEqual(resp.status_code, 403)
+
+        # Admin access granted
+        auth(self.client, self.admin)
+        resp = self.client.get("/api/v1/admin/inventory-reservations/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.data.get("results", resp.data)
+        self.assertGreaterEqual(len(data), 1)
+

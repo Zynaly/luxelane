@@ -16,10 +16,12 @@ from warehouse.urls import (
     stock_movement_urlpatterns,
     stock_transfer_urlpatterns,
     purchase_order_urlpatterns,
+    warehouse_admin_urls,
 )
 
 # Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
-combined_admin_urls = vendor_admin_urls + catalog_admin_urls
+combined_admin_urls = vendor_admin_urls + catalog_admin_urls + warehouse_admin_urls
+
 
 urlpatterns = [
     # Sprint 0 — no domain endpoints (health is at root level)

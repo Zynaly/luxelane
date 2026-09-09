@@ -12,12 +12,15 @@ from warehouse.models import (
     StockTransferItem,
     PurchaseOrder,
     PurchaseOrderItem,
+    InventoryReservation,
     StaffRole,
     MovementType,
     TransferStatus,
     POStatus,
+    ReservationStatus,
 )
 from catalog.models import ProductVariant
+
 
 
 # ── Warehouse ─────────────────────────────────────────────────────────────────
@@ -203,3 +206,55 @@ class VariantAvailabilitySerializer(serializers.Serializer):
     sku             = serializers.CharField()
     total_available = serializers.IntegerField()
     by_warehouse    = WarehouseStockAvailability(many=True)
+
+
+# ── Sprint 7: Allocation & Reservation Serializers ────────────────────────────
+
+class AllocationItemRequestSerializer(serializers.Serializer):
+    variant_id = serializers.UUIDField()
+    quantity   = serializers.IntegerField(min_value=1)
+
+
+class AllocationPreviewRequestSerializer(serializers.Serializer):
+    items               = AllocationItemRequestSerializer(many=True)
+    shipping_address_id = serializers.UUIDField(required=False, allow_null=True)
+    latitude            = serializers.FloatField(required=False, allow_null=True)
+    longitude           = serializers.FloatField(required=False, allow_null=True)
+
+
+class AllocationItemResponseSerializer(serializers.Serializer):
+    variant_id    = serializers.CharField()
+    sku           = serializers.CharField()
+    product_title = serializers.CharField()
+    quantity      = serializers.IntegerField()
+
+
+class AllocationSplitSerializer(serializers.Serializer):
+    warehouse_id   = serializers.CharField()
+    warehouse_name = serializers.CharField()
+    distance_km    = serializers.FloatField()
+    items          = AllocationItemResponseSerializer(many=True)
+
+
+class AllocationPreviewResponseSerializer(serializers.Serializer):
+    splits       = AllocationSplitSerializer(many=True)
+    total_splits = serializers.IntegerField()
+    feasible     = serializers.BooleanField()
+    unallocated  = serializers.ListField(child=serializers.DictField(), required=False)
+
+
+class InventoryReservationSerializer(serializers.ModelSerializer):
+    warehouse_id   = serializers.CharField(source="inventory.warehouse.id", read_only=True)
+    warehouse_name = serializers.CharField(source="inventory.warehouse.name", read_only=True)
+    variant_sku    = serializers.CharField(source="inventory.variant.sku", read_only=True)
+    product_title  = serializers.CharField(source="inventory.variant.product.title", read_only=True)
+
+    class Meta:
+        model = InventoryReservation
+        fields = [
+            "id", "inventory", "warehouse_id", "warehouse_name",
+            "variant_sku", "product_title", "cart_item_id", "order_item_id",
+            "quantity", "status", "expires_at", "created_at", "updated_at",
+        ]
+        read_only_fields = fields
+
