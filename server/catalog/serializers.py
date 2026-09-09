@@ -475,3 +475,119 @@ class WishlistSerializer(serializers.ModelSerializer):
         product = validated_data["product"]
         wishlist_item, _ = Wishlist.objects.get_or_create(user=user, product=product)
         return wishlist_item
+
+
+# ── Sprint 14: Reviews, Ratings & Product Q&A Serializers ───────────────────
+
+from catalog.models import (
+    Review,
+    ReviewMedia,
+    ReviewReply,
+    ReviewModerationStatus,
+    ProductQuestion,
+    ProductAnswer,
+)
+
+
+class ReviewMediaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReviewMedia
+        fields = ["id", "media_url", "media_type", "created_at"]
+        read_only_fields = fields
+
+
+class ReviewReplySerializer(serializers.ModelSerializer):
+    vendor_staff_name = serializers.CharField(source="vendor_staff.get_full_name", read_only=True)
+
+    class Meta:
+        model = ReviewReply
+        fields = ["id", "vendor_staff", "vendor_staff_name", "comment", "created_at"]
+        read_only_fields = fields
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+    media = ReviewMediaSerializer(many=True, read_only=True)
+    reply = ReviewReplySerializer(read_only=True)
+
+    class Meta:
+        model = Review
+        fields = [
+            "id",
+            "product",
+            "user",
+            "user_name",
+            "order_item",
+            "rating",
+            "title",
+            "comment",
+            "is_verified_purchase",
+            "moderation_status",
+            "media",
+            "reply",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "product",
+            "user",
+            "user_name",
+            "is_verified_purchase",
+            "moderation_status",
+            "media",
+            "reply",
+            "created_at",
+            "updated_at",
+        ]
+
+
+class ReviewCreateSerializer(serializers.Serializer):
+    order_item_id = serializers.UUIDField(required=False, allow_null=True)
+    rating = serializers.IntegerField(min_value=1, max_value=5, required=True)
+    title = serializers.CharField(max_length=200, required=True)
+    comment = serializers.CharField(required=True)
+    media_urls = serializers.ListField(
+        child=serializers.URLField(),
+        required=False,
+        default=list,
+    )
+
+
+class ReviewReplyCreateSerializer(serializers.Serializer):
+    comment = serializers.CharField(required=True)
+
+
+class AdminReviewModerationSerializer(serializers.Serializer):
+    moderation_status = serializers.ChoiceField(
+        choices=ReviewModerationStatus.choices,
+        required=True,
+    )
+
+
+class ProductAnswerSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+
+    class Meta:
+        model = ProductAnswer
+        fields = ["id", "question", "user", "user_name", "answer", "is_vendor_response", "created_at"]
+        read_only_fields = fields
+
+
+class ProductQuestionSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+    answers = ProductAnswerSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ProductQuestion
+        fields = ["id", "product", "user", "user_name", "question", "is_approved", "answers", "created_at"]
+        read_only_fields = fields
+
+
+class ProductQuestionCreateSerializer(serializers.Serializer):
+    question = serializers.CharField(required=True)
+
+
+class ProductAnswerCreateSerializer(serializers.Serializer):
+    answer = serializers.CharField(required=True)
+

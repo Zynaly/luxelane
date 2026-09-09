@@ -510,3 +510,205 @@ class PaymentsAppTests(APITestCase):
         self.assertEqual(entry_resp.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(entry_resp.data["results"]), 1)
 
+
+class Sprint14RefundTests(APITestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            email="patron_refund@luxelane.com",
+            password="SecurePassword123!",
+            role="customer",
+        )
+        self.finance_admin = User.objects.create_user(
+            email="finance_refund@luxelane.com",
+            password="SecurePassword123!",
+            role="finance_admin",
+        )
+        self.platform_admin = User.objects.create_user(
+            email="platform_refund@luxelane.com",
+            password="SecurePassword123!",
+            role="platform_admin",
+        )
+        self.vendor_owner = User.objects.create_user(
+            email="vendor_refund@luxelane.com",
+            password="SecurePassword123!",
+            role="vendor_owner",
+        )
+
+        from vendors.models import Vendor
+        self.vendor = Vendor.objects.create(
+            owner_user=self.vendor_owner,
+            legal_name="Maison Haute Joaillerie",
+            display_name="Maison Haute",
+            status="active",
+        )
+
+        self.category = Category.objects.create(name="Jewelry", slug="jewelry-ref")
+        self.brand = Brand.objects.create(name="Cartier", slug="cartier-ref")
+        self.product = Product.objects.create(
+            vendor=self.vendor,
+            category=self.category,
+            brand=self.brand,
+            title="Love Bracelet",
+            slug="love-bracelet-ref",
+            base_price=Decimal("7500.00"),
+            status="active",
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="CR-LOVE-18K",
+            price=Decimal("7500.00"),
+            is_active=True,
+        )
+
+        self.order = Order.objects.create(
+            customer=self.customer,
+            order_number="ORD-20260909-REF001",
+            currency="USD",
+            subtotal=Decimal("7500.00"),
+            shipping_total=Decimal("100.00"),
+            tax_total=Decimal("0.00"),
+            grand_total=Decimal("7600.00"),
+            status=OrderStatus.CONFIRMED,
+        )
+        self.vendor_order = VendorOrder.objects.create(
+            order=self.order,
+            vendor=self.vendor,
+            subtotal=Decimal("7500.00"),
+            shipping_amount=Decimal("100.00"),
+            commission_amount=Decimal("750.00"),
+            commission_pct_applied=Decimal("10.00"),
+            vendor_net_amount=Decimal("6750.00"),
+            status=VendorOrderStatus.CONFIRMED,
+        )
+        self.order_item = OrderItem.objects.create(
+            vendor_order=self.vendor_order,
+            variant=self.variant,
+            quantity=1,
+            unit_price=Decimal("7500.00"),
+            line_subtotal=Decimal("7500.00"),
+            fulfilment_status=OrderItemFulfilmentStatus.DELIVERED,
+        )
+
+    def test_finance_admin_partial_order_refund(self):
+        """Finance admin issues partial refund, balanced ledger entries posted."""
+        from accounts.models import LedgerEntry
+        from payments.models import Refund, RefundStatus
+
+        self.client.force_authenticate(user=self.finance_admin)
+        url = f"/api/v1/payments/orders/{self.order.id}/refund/"
+        payload = {
+            "amount": "500.00",
+            "reason": "Customer loyalty concession",
+            "method": "original_payment",
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Decimal(resp.data["amount"]), Decimal("500.00"))
+        self.assertEqual(resp.data["status"], RefundStatus.SUCCEEDED)
+
+        # Ledger entries balanced
+        refund_id = resp.data["id"]
+        refund = Refund.objects.get(id=refund_id)
+        entries = LedgerEntry.objects.filter(entry_group_id=refund.ledger_entry_group_id)
+        self.assertEqual(entries.count(), 2)
+        self.assertEqual(sum(e.amount for e in entries), Decimal("0.00"))
+
+    def test_wallet_order_refund_credits_customer(self):
+        """Refund to wallet immediately increases customer's available store credit."""
+        from accounts.models import LedgerAccount
+        from payments.services.ledger import ledger_service
+
+        self.client.force_authenticate(user=self.finance_admin)
+        url = f"/api/v1/payments/orders/{self.order.id}/refund/"
+        payload = {
+            "amount": "250.00",
+            "reason": "Store credit settlement",
+            "method": "wallet",
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        account = LedgerAccount.objects.get(account_key=f"customer_wallet:{self.customer.id}")
+        bal = abs(ledger_service.get_account_balance(account))
+        self.assertEqual(bal, Decimal("250.00"))
+
+    def test_refund_exceeding_order_balance_rejected(self):
+        """Refund request exceeding order grand total is rejected."""
+        self.client.force_authenticate(user=self.finance_admin)
+        url = f"/api/v1/payments/orders/{self.order.id}/refund/"
+        payload = {
+            "amount": "99999.00",
+            "reason": "Exorbitant refund",
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        error_fields = resp.data.get("field_errors", resp.data.get("error", {}).get("field_errors", resp.data))
+        self.assertIn("amount", error_fields)
+
+    def test_full_refund_marks_order_refunded(self):
+        """Full refund transitions order status to REFUNDED."""
+        self.client.force_authenticate(user=self.finance_admin)
+        url = f"/api/v1/payments/orders/{self.order.id}/refund/"
+        payload = {
+            "amount": "7600.00",
+            "reason": "Full cancellation and return",
+            "method": "original_payment",
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, OrderStatus.REFUNDED)
+
+    def test_admin_refund_viewset_permissions_and_filters(self):
+        """Platform/Finance admin can list refunds; Customer is forbidden."""
+        from payments.services.refund_service import refund_service
+
+        refund_service.process_order_refund(
+            order=self.order,
+            amount=Decimal("100.00"),
+            reason="Test audit",
+            processed_by=self.finance_admin,
+        )
+
+        # Customer forbidden
+        self.client.force_authenticate(user=self.customer)
+        resp = self.client.get("/api/v1/admin/refunds/")
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Finance admin allowed
+        self.client.force_authenticate(user=self.finance_admin)
+        resp_admin = self.client.get(f"/api/v1/admin/refunds/?order_id={self.order.id}")
+        self.assertEqual(resp_admin.status_code, status.HTTP_200_OK)
+        results = resp_admin.data.get("results", resp_admin.data)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(Decimal(results[0]["amount"]), Decimal("100.00"))
+
+    def test_instant_wallet_refund_for_rma(self):
+        """Vendor or Finance admin can issue instant wallet refund for an active return request."""
+        from accounts.models import LedgerAccount
+        from orders.models import ReturnRequest, ReturnStatus
+        from payments.services.ledger import ledger_service
+
+        rma = ReturnRequest.objects.create(
+            order_item=self.order_item,
+            user=self.customer,
+            reason="DEFECTIVE",
+            status=ReturnStatus.REQUESTED,
+        )
+
+        # Finance admin issues instant refund
+        self.client.force_authenticate(user=self.finance_admin)
+        url = f"/api/v1/returns/{rma.id}/instant-refund/"
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        rma.refresh_from_db()
+        self.assertEqual(rma.status, ReturnStatus.CLOSED)
+
+        # Customer's wallet balance credited with item line_subtotal
+        account = LedgerAccount.objects.get(account_key=f"customer_wallet:{self.customer.id}")
+        bal = abs(ledger_service.get_account_balance(account))
+        self.assertEqual(bal, self.order_item.line_subtotal)
+
+

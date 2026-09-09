@@ -402,3 +402,231 @@ class OrdersOrchestrationTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         results = resp.data.get("results", resp.data)
         self.assertGreaterEqual(len(results), 1)
+
+
+# ── Sprint 14: Return Requests & Reverse Logistics Tests ─────────────────────
+
+from orders.models import ReturnRequest, ReturnShipment, ReturnStatus
+from payments.models import EscrowHold, EscrowStatus
+from warehouse.models import StockMovement, MovementType
+
+
+class Sprint14ReturnTests(APITestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(
+            email="s14_customer@luxelane.com",
+            password="Password123!",
+            role="customer",
+        )
+        self.other_customer = User.objects.create_user(
+            email="s14_other_cust@luxelane.com",
+            password="Password123!",
+            role="customer",
+        )
+        self.vendor_owner = User.objects.create_user(
+            email="s14_vendor@luxelane.com",
+            password="Password123!",
+            role="vendor_owner",
+        )
+        self.vendor = Vendor.objects.create(
+            owner_user=self.vendor_owner,
+            legal_name="Geneva Timepieces SA",
+            display_name="Geneva Timepieces",
+            slug="geneva-timepieces-s14",
+            status="active",
+        )
+        VendorStaff.objects.create(
+            vendor=self.vendor,
+            user=self.vendor_owner,
+            staff_role="manager",
+            is_active=True,
+        )
+
+        self.category = Category.objects.create(name="Horology S14", slug="horology-s14")
+        self.brand = Brand.objects.create(name="Geneva S14", slug="geneva-s14")
+        self.product = Product.objects.create(
+            vendor=self.vendor,
+            category=self.category,
+            brand=self.brand,
+            title="Royal Chrono",
+            slug="royal-chrono-s14",
+            base_price=Decimal("1500.00"),
+            status="approved",
+            is_active=True,
+        )
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="ROYAL-CHRONO-01",
+            price=Decimal("1500.00"),
+            weight_kg=Decimal("1.200"),
+            is_active=True,
+        )
+
+        self.warehouse = Warehouse.objects.create(
+            name="Main Vault",
+            is_active=True,
+        )
+        self.inventory = Inventory.objects.create(
+            warehouse=self.warehouse,
+            variant=self.variant,
+            on_hand=5,
+            reserved_cache=0,
+        )
+
+        self.address = Address.objects.create(
+            user=self.customer,
+            line1="Bahnhofstrasse 10",
+            city="Zurich",
+            state="Zurich",
+            country="CH",
+            postal_code="8001",
+        )
+
+        self.order = Order.objects.create(
+            order_number=f"ORD-S14-{uuid.uuid4().hex[:6].upper()}",
+            customer=self.customer,
+            shipping_address=self.address,
+            status=OrderStatus.DELIVERED,
+            subtotal=Decimal("1500.00"),
+            grand_total=Decimal("1500.00"),
+        )
+        self.vendor_order = VendorOrder.objects.create(
+            order=self.order,
+            vendor=self.vendor,
+            subtotal=Decimal("1500.00"),
+            commission_amount=Decimal("150.00"),
+            vendor_net_amount=Decimal("1350.00"),
+            status=VendorOrderStatus.DELIVERED,
+        )
+        self.order_item = OrderItem.objects.create(
+            vendor_order=self.vendor_order,
+            variant=self.variant,
+            warehouse=self.warehouse,
+            quantity=1,
+            unit_price=Decimal("1500.00"),
+            line_subtotal=Decimal("1500.00"),
+            fulfilment_status=OrderItemFulfilmentStatus.DELIVERED,
+        )
+        self.escrow_hold = EscrowHold.objects.create(
+            vendor_order=self.vendor_order,
+            vendor=self.vendor,
+            gross_amount=Decimal("1500.00"),
+            commission_amount=Decimal("150.00"),
+            net_vendor_amount=Decimal("1350.00"),
+            currency="USD",
+            status=EscrowStatus.ELIGIBLE_FOR_RELEASE,
+        )
+
+    def test_customer_create_return_request_success(self):
+        url = f"/api/v1/orders/{self.order.id}/items/{self.order_item.id}/return/"
+        self.client.force_authenticate(user=self.customer)
+
+        payload = {
+            "reason": "Dial size slightly smaller than anticipated.",
+            "evidence_media": ["https://media.luxelane.com/evidence1.jpg"],
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["status"], ReturnStatus.REQUESTED)
+        self.assertEqual(resp.data["reason"], payload["reason"])
+
+        self.order_item.refresh_from_db()
+        self.assertEqual(self.order_item.fulfilment_status, OrderItemFulfilmentStatus.RETURN_REQUESTED)
+
+    def test_customer_create_return_unauthorized_fails(self):
+        url = f"/api/v1/orders/{self.order.id}/items/{self.order_item.id}/return/"
+        self.client.force_authenticate(user=self.other_customer)
+
+        payload = {"reason": "Not my item."}
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_customer_create_return_non_delivered_fails(self):
+        self.order_item.fulfilment_status = OrderItemFulfilmentStatus.ALLOCATED
+        self.order_item.save(update_fields=["fulfilment_status"])
+
+        url = f"/api/v1/orders/{self.order.id}/items/{self.order_item.id}/return/"
+        self.client.force_authenticate(user=self.customer)
+        resp = self.client.post(url, {"reason": "Changed mind"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_vendor_approve_return_creates_shipment_and_freezes_escrow(self):
+        # Create RMA
+        from orders.services.returns import return_service
+        rma = return_service.create_return_request(
+            order_item=self.order_item,
+            user=self.customer,
+            reason="Defective crown mechanism",
+        )
+
+        decision_url = f"/api/v1/returns/{rma.id}/decision/"
+        self.client.force_authenticate(user=self.vendor_owner)
+
+        resp = self.client.patch(decision_url, {"decision": "approve"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["status"], ReturnStatus.APPROVED)
+        self.assertIsNotNone(resp.data["return_shipment"])
+        self.assertTrue(resp.data["return_shipment"]["tracking_number"].startswith("RET"))
+
+        # Verify Escrow hold is frozen by RMA
+        self.escrow_hold.refresh_from_db()
+        self.assertEqual(self.escrow_hold.status, EscrowStatus.DISPUTED)
+        self.assertEqual(self.escrow_hold.frozen_by_rma_id, rma.id)
+
+    def test_vendor_reject_return_reverts_order_item(self):
+        from orders.services.returns import return_service
+        rma = return_service.create_return_request(
+            order_item=self.order_item,
+            user=self.customer,
+            reason="Scratched by user",
+        )
+
+        decision_url = f"/api/v1/returns/{rma.id}/decision/"
+        self.client.force_authenticate(user=self.vendor_owner)
+
+        resp = self.client.patch(
+            decision_url,
+            {"decision": "reject", "rejection_reason": "Damage caused by customer misuse."},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["status"], ReturnStatus.REJECTED)
+        self.assertEqual(resp.data["rejection_reason"], "Damage caused by customer misuse.")
+
+        self.order_item.refresh_from_db()
+        self.assertEqual(self.order_item.fulfilment_status, OrderItemFulfilmentStatus.DELIVERED)
+
+    def test_warehouse_receive_and_restock(self):
+        from orders.services.returns import return_service
+        rma = return_service.create_return_request(
+            order_item=self.order_item,
+            user=self.customer,
+            reason="Wrong colorway",
+        )
+        return_service.decide_return(rma, "approve", user=self.vendor_owner)
+
+        receive_url = f"/api/v1/returns/{rma.id}/receive/"
+        self.client.force_authenticate(user=self.vendor_owner)
+
+        initial_stock = self.inventory.on_hand
+        resp = self.client.post(
+            receive_url,
+            {
+                "condition": "restockable",
+                "action": "restock",
+                "warehouse_id": str(self.warehouse.id),
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["status"], ReturnStatus.RESTOCKED)
+
+        # Check physical inventory incremented
+        self.inventory.refresh_from_db()
+        self.assertEqual(self.inventory.on_hand, initial_stock + 1)
+
+        # Check stock movement
+        movement = StockMovement.objects.filter(reference_id=rma.id).first()
+        self.assertIsNotNone(movement)
+        self.assertEqual(movement.movement_type, MovementType.RETURN_RESTOCK)
+

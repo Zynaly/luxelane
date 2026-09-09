@@ -14,6 +14,11 @@ from orders.views import (
     VendorMyOrdersViewSet,
     WarehouseOrdersViewSet,
     AdminOrderViewSet,
+    ReturnRequestCreateView,
+    ReturnRequestViewSet,
+    ReturnDecisionView,
+    ReturnReceiveView,
+    InstantRefundView,
 )
 
 # ── Customer Orders Patterns (/orders/...) ────────────────────────────────────
@@ -24,8 +29,20 @@ order_urlpatterns = [
     path("track/", OrderTrackView.as_view(), name="order-track"),
     path("<uuid:pk>/cancel/", OrderCancelView.as_view(), name="order-cancel"),
     path("<uuid:id>/items/<uuid:item_id>/cancel/", OrderItemCancelView.as_view(), name="order-item-cancel"),
+    path("<uuid:id>/items/<uuid:item_id>/return/", ReturnRequestCreateView.as_view(), name="order-item-return"),
     path("<uuid:id>/invoice/", InvoiceView.as_view(), name="order-invoice"),
     path("", include(customer_order_router.urls)),
+]
+
+# ── Reverse Logistics / Returns Patterns (/returns/...) ───────────────────────
+returns_router = DefaultRouter()
+returns_router.register(r"", ReturnRequestViewSet, basename="return-request")
+
+returns_urlpatterns = [
+    path("<uuid:id>/decision/", ReturnDecisionView.as_view(), name="return-decision"),
+    path("<uuid:id>/receive/", ReturnReceiveView.as_view(), name="return-receive"),
+    path("<uuid:id>/instant-refund/", InstantRefundView.as_view(), name="return-instant-refund"),
+    path("", include(returns_router.urls)),
 ]
 
 # ── Checkout Orchestration (/checkout/place-order/) ───────────────────────────

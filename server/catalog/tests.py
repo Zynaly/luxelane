@@ -570,3 +570,169 @@ class WishlistTests(TestCase):
         resp = self.client.get("/api/v1/wishlist/")
         self.assertIn(resp.status_code, [401, 403])
 
+
+# ── Sprint 14: Reviews & Product Q&A Tests ───────────────────────────────────
+
+class Sprint14ReviewAndQATests(TestCase):
+    def setUp(self):
+        from decimal import Decimal
+        from orders.models import Order, OrderStatus, VendorOrder, VendorOrderStatus, OrderItem, OrderItemFulfilmentStatus
+        from catalog.models import Review, ReviewModerationStatus, ProductQuestion, ProductAnswer
+
+        self.client = APIClient()
+        self.customer = make_user("reviewer@test.com", role=RoleEnum.CUSTOMER)
+        self.other_customer = make_user("other_reviewer@test.com", role=RoleEnum.CUSTOMER)
+        self.vendor_owner = make_user("rev_vendor@test.com", role=RoleEnum.VENDOR_OWNER)
+        self.admin = make_user("rev_admin@test.com", role=RoleEnum.PLATFORM_ADMIN)
+
+        self.vendor = make_vendor(self.vendor_owner, "Maison Chrono")
+        self.category = make_category("Fine Timepieces", "fine-timepieces")
+        self.product = make_product(self.vendor, self.category, title="Royal Oak Perpetual")
+        self.variant = ProductVariant.objects.create(
+            product=self.product,
+            sku="AP-RO-PERP",
+            price=Decimal("45000.00"),
+            is_active=True,
+        )
+
+        # Create a delivered order item for verified purchase
+        self.order = Order.objects.create(
+            customer=self.customer,
+            order_number="ORD-20260909-REV001",
+            currency="USD",
+            subtotal=Decimal("45000.00"),
+            grand_total=Decimal("45000.00"),
+            status=OrderStatus.CONFIRMED,
+        )
+        self.vendor_order = VendorOrder.objects.create(
+            order=self.order,
+            vendor=self.vendor,
+            subtotal=Decimal("45000.00"),
+            vendor_net_amount=Decimal("40500.00"),
+            status=VendorOrderStatus.CONFIRMED,
+        )
+        self.order_item = OrderItem.objects.create(
+            vendor_order=self.vendor_order,
+            variant=self.variant,
+            quantity=1,
+            unit_price=Decimal("45000.00"),
+            line_subtotal=Decimal("45000.00"),
+            fulfilment_status=OrderItemFulfilmentStatus.DELIVERED,
+        )
+
+    def test_customer_creates_verified_review_and_updates_rating(self):
+        """Customer with delivered order item creates review with verified badge and updates rating."""
+        from catalog.models import Review
+
+        auth(self.client, self.customer)
+        url = f"/api/v1/products/{self.product.id}/reviews/"
+        payload = {
+            "rating": 5,
+            "title": "Masterpiece of horology",
+            "comment": "Exceptional finishing on the tapisserie dial and case bevels.",
+            "order_item_id": str(self.order_item.id),
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, 201)
+        self.assertTrue(resp.data["is_verified_purchase"])
+        self.assertEqual(resp.data["rating"], 5)
+
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.rating_count, 1)
+        self.assertEqual(float(self.product.rating_avg), 5.0)
+
+    def test_customer_unverified_review(self):
+        """Customer without order item can post an unverified review."""
+        auth(self.client, self.other_customer)
+        url = f"/api/v1/products/{self.product.id}/reviews/"
+        payload = {
+            "rating": 4,
+            "title": "Stunning aesthetics",
+            "comment": "Saw this at the Geneva boutique, truly remarkable.",
+        }
+        resp = self.client.post(url, payload, format="json")
+        self.assertEqual(resp.status_code, 201)
+        self.assertFalse(resp.data["is_verified_purchase"])
+
+    def test_duplicate_review_for_same_order_item_rejected(self):
+        """Submitting a second review for the same order item is rejected."""
+        auth(self.client, self.customer)
+        url = f"/api/v1/products/{self.product.id}/reviews/"
+        payload = {
+            "rating": 5,
+            "title": "First review",
+            "comment": "Great watch.",
+            "order_item_id": str(self.order_item.id),
+        }
+        resp1 = self.client.post(url, payload, format="json")
+        self.assertEqual(resp1.status_code, 201)
+
+        resp2 = self.client.post(url, payload, format="json")
+        self.assertEqual(resp2.status_code, 400)
+
+    def test_vendor_staff_replies_to_review(self):
+        """Vendor owner can reply to a review on their own product."""
+        from catalog.models import Review, ReviewModerationStatus
+
+        review = Review.objects.create(
+            product=self.product,
+            user=self.customer,
+            rating=5,
+            title="Magnificent piece",
+            comment="Exceeded all expectations.",
+            moderation_status=ReviewModerationStatus.APPROVED,
+        )
+
+        # Other customer cannot reply
+        auth(self.client, self.other_customer)
+        resp_forbidden = self.client.post(f"/api/v1/reviews/{review.id}/reply/", {"comment": "Unauthorized reply"}, format="json")
+        self.assertEqual(resp_forbidden.status_code, 403)
+
+        # Vendor owner can reply
+        auth(self.client, self.vendor_owner)
+        resp_vendor = self.client.post(
+            f"/api/v1/reviews/{review.id}/reply/",
+            {"comment": "Thank you for appreciating our horological heritage!"},
+            format="json",
+        )
+        self.assertEqual(resp_vendor.status_code, 201)
+        self.assertEqual(resp_vendor.data["comment"], "Thank you for appreciating our horological heritage!")
+
+    def test_admin_review_moderation(self):
+        """Platform Admin moderates review and ratings recalculate."""
+        from catalog.models import Review, ReviewModerationStatus
+
+        review = Review.objects.create(
+            product=self.product,
+            user=self.customer,
+            rating=1,
+            title="Spam comment",
+            comment="Visit my external spam site",
+            moderation_status=ReviewModerationStatus.PENDING,
+        )
+
+        auth(self.client, self.admin)
+        url = f"/api/v1/admin/reviews/{review.id}/moderate/"
+        resp = self.client.patch(url, {"moderation_status": "rejected"}, format="json")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["moderation_status"], "rejected")
+
+        review.refresh_from_db()
+        self.assertEqual(review.moderation_status, ReviewModerationStatus.REJECTED)
+
+    def test_product_question_and_vendor_answer(self):
+        """User asks a question; vendor responds with official vendor flag."""
+        auth(self.client, self.customer)
+        q_url = f"/api/v1/products/{self.product.id}/questions/"
+        q_resp = self.client.post(q_url, {"question": "What is the water resistance rating?"}, format="json")
+        self.assertEqual(q_resp.status_code, 201)
+        question_id = q_resp.data["id"]
+
+        # Vendor answers
+        auth(self.client, self.vendor_owner)
+        a_url = f"/api/v1/products/{self.product.id}/questions/{question_id}/answers/"
+        a_resp = self.client.post(a_url, {"answer": "Water resistant to 50 meters (5 ATM)."}, format="json")
+        self.assertEqual(a_resp.status_code, 201)
+        self.assertTrue(a_resp.data["is_vendor_response"])
+
+

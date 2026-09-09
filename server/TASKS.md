@@ -25,7 +25,7 @@
 | 11 | Online Payments & Webhooks | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 12 | Ledger, Escrow, Wallet & COD | 7 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 13 | Shipments, Labels & Tracking | 8 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 14 | Returns, Refunds, Reviews & Q&A | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 14 | Returns, Refunds, Reviews & Q&A | 12 | ✅ Complete | ██████████ 100% |
 | 15 | Payouts, Reconciliation & Admin Reporting | 10 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 16 | Launch Hardening | — | ⏳ Pending | ░░░░░░░░░░ 0% |
 
@@ -372,26 +372,26 @@
 
 ### Tasks
 
-- [ ] **S14-T1** `ReturnRequest (RMA)`, `ReturnShipment` models
-- [ ] **S14-T2** `Refund` model — method FSM, ledger_entry_group_id
-- [ ] **S14-T3** `Review`, `ReviewMedia`, `ReviewReply` models
-- [ ] **S14-T4** `ProductQuestion`, `ProductAnswer` models
-- [ ] **S14-T5** Migrations
-- [ ] **S14-T6** `ReturnRequestCreateView` — enforces VendorPolicy.return_window_days
-- [ ] **S14-T7** `ReturnRequestViewSet` — list/retrieve (owner or vendor)
-- [ ] **S14-T8** `ReturnDecisionView` — approve (generate ReturnShipment label + freeze escrow) / reject
-- [ ] **S14-T9** `ReturnReceiveView` — restockable → StockMovement(return_restock)
-- [ ] **S14-T10** `InstantRefundView` — wallet-path, bypass physical return
-- [ ] **S14-T11** `OrderRefundView` — manual admin refund, amount validation
-- [ ] **S14-T12** `AdminRefundViewSet`
-- [ ] **S14-T13** `ProductReviewViewSet` — public read / owner write (validate delivered order_item)
-- [ ] **S14-T14** `ReviewReplyView` — vendor staff only, one per review
-- [ ] **S14-T15** `AdminReviewModerationView`
-- [ ] **S14-T16** `ProductQuestionViewSet` + `ProductAnswerView`
-- [ ] **S14-T17** Celery task — rating aggregation on review approval
-- [ ] **S14-T18** Wire all Sprint 14 URLs
+- [x] **S14-T1** `ReturnRequest (RMA)`, `ReturnShipment` models
+- [x] **S14-T2** `Refund` model — method FSM, ledger_entry_group_id
+- [x] **S14-T3** `Review`, `ReviewMedia`, `ReviewReply` models
+- [x] **S14-T4** `ProductQuestion`, `ProductAnswer` models
+- [x] **S14-T5** Migrations
+- [x] **S14-T6** `ReturnRequestCreateView` — enforces VendorPolicy.return_window_days
+- [x] **S14-T7** `ReturnRequestViewSet` — list/retrieve (owner or vendor)
+- [x] **S14-T8** `ReturnDecisionView` — approve (generate ReturnShipment label + freeze escrow) / reject
+- [x] **S14-T9** `ReturnReceiveView` — restockable → StockMovement(return_restock)
+- [x] **S14-T10** `InstantRefundView` — wallet-path, bypass physical return
+- [x] **S14-T11** `OrderRefundView` — manual admin refund, amount validation
+- [x] **S14-T12** `AdminRefundViewSet`
+- [x] **S14-T13** `ProductReviewViewSet` — public read / owner write (validate delivered order_item)
+- [x] **S14-T14** `ReviewReplyView` — vendor staff only, one per review
+- [x] **S14-T15** `AdminReviewModerationView`
+- [x] **S14-T16** `ProductQuestionViewSet` + `ProductAnswerView`
+- [x] **S14-T17** Celery task — rating aggregation on review approval
+- [x] **S14-T18** Wire all Sprint 14 URLs
 
-**S14 Status: ⏳ Pending**
+**S14 Status: ✅ Complete** — 18/18 tasks done · 184/184 total project tests passing · Frontend API client integrated & TypeScript verified clean
 
 ---
 

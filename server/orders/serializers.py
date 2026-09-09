@@ -171,3 +171,80 @@ class OrderTrackResponseSerializer(serializers.ModelSerializer):
             for vo in obj.vendor_orders.all()
             for item in vo.items.all()
         )
+
+
+# ── Sprint 14: Return Request & RMA Serializers ─────────────────────────────
+
+from orders.models import ReturnRequest, ReturnShipment
+
+
+class ReturnShipmentSerializer(serializers.ModelSerializer):
+    carrier_name = serializers.CharField(source="carrier.name", read_only=True, allow_null=True)
+
+    class Meta:
+        model = ReturnShipment
+        fields = [
+            "id",
+            "carrier",
+            "carrier_name",
+            "tracking_number",
+            "tracking_url",
+            "label_url",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class ReturnRequestSerializer(serializers.ModelSerializer):
+    order_id = serializers.UUIDField(source="order_item.vendor_order.order.id", read_only=True)
+    order_number = serializers.CharField(source="order_item.vendor_order.order.order_number", read_only=True)
+    order_item_sku = serializers.CharField(source="order_item.variant_sku_snapshot", read_only=True)
+    product_title = serializers.CharField(source="order_item.product_title_snapshot", read_only=True)
+    quantity = serializers.IntegerField(source="order_item.quantity", read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
+    return_shipment = ReturnShipmentSerializer(read_only=True)
+
+    class Meta:
+        model = ReturnRequest
+        fields = [
+            "id",
+            "order_id",
+            "order_number",
+            "order_item",
+            "order_item_sku",
+            "product_title",
+            "quantity",
+            "user",
+            "user_email",
+            "reason",
+            "evidence_media",
+            "status",
+            "rejection_reason",
+            "return_shipment",
+            "requested_at",
+            "closed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class ReturnRequestCreateSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=255, required=True)
+    evidence_media = serializers.ListField(
+        child=serializers.URLField(),
+        required=False,
+        default=list,
+    )
+
+
+class ReturnDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=["approve", "reject"], required=True)
+    rejection_reason = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
+
+
+class ReturnReceiveSerializer(serializers.Serializer):
+    condition = serializers.ChoiceField(choices=["restockable", "damaged"], default="restockable")
+    action = serializers.ChoiceField(choices=["restock", "write_off"], default="restock")
+    warehouse_id = serializers.UUIDField(required=False, allow_null=True)
+

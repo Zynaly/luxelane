@@ -739,3 +739,179 @@ class BulkImportStatusView(generics.RetrieveAPIView):
     def get_queryset(self):
         vendor = _get_vendor_for_user(self.request.user)
         return BulkImportJob.objects.filter(vendor=vendor, is_deleted=False)
+
+
+# ── Sprint 14: Reviews & Product Q&A Views ───────────────────────────────────
+
+from catalog.models import (
+    Review,
+    ReviewReply,
+    ReviewModerationStatus,
+    ProductQuestion,
+    ProductAnswer,
+)
+from catalog.serializers import (
+    ReviewSerializer,
+    ReviewCreateSerializer,
+    ReviewReplySerializer,
+    ReviewReplyCreateSerializer,
+    AdminReviewModerationSerializer,
+    ProductQuestionSerializer,
+    ProductQuestionCreateSerializer,
+    ProductAnswerSerializer,
+    ProductAnswerCreateSerializer,
+)
+from catalog.services.reviews import review_service
+from core.permissions import IsPlatformAdmin
+
+
+class ProductReviewViewSet(viewsets.ModelViewSet):
+    """
+    GET /products/{product_id}/reviews/ — List approved customer reviews.
+    POST /products/{product_id}/reviews/ — Submit customer review (verified purchase check).
+    """
+    serializer_class = ReviewSerializer
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get_queryset(self):
+        product_id = self.kwargs.get("product_id")
+        qs = Review.objects.filter(moderation_status=ReviewModerationStatus.APPROVED)
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        return qs.select_related("user", "reply__vendor_staff").prefetch_related("media")
+
+    def create(self, request, *args, **kwargs):
+        product_id = self.kwargs.get("product_id")
+        product = Product.objects.filter(id=product_id, is_deleted=False).first()
+        if not product:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Product not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ReviewCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        review = review_service.create_review(
+            product=product,
+            user=request.user,
+            rating=data["rating"],
+            title=data["title"],
+            comment=data["comment"],
+            order_item_id=data.get("order_item_id"),
+            media_urls=data.get("media_urls"),
+        )
+        return Response(ReviewSerializer(review).data, status=status.HTTP_201_CREATED)
+
+
+class ReviewReplyView(APIView):
+    """
+    POST /reviews/{id}/reply/ — Vendor staff replies to customer review.
+    """
+    permission_classes = [IsAuthenticated, IsVendorMember]
+
+    def post(self, request, id):
+        review = Review.objects.filter(id=id).select_related("product__vendor").first()
+        if not review:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Review not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        vendor = _get_vendor_for_user(request.user)
+        if not vendor or review.product.vendor != vendor:
+            return Response({"error": {"code": "FORBIDDEN", "message": "You can only reply to reviews for your own products."}}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = ReviewReplyCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reply = review_service.reply_to_review(
+            review=review,
+            vendor_staff=request.user,
+            comment=serializer.validated_data["comment"],
+        )
+        return Response(ReviewReplySerializer(reply).data, status=status.HTTP_201_CREATED)
+
+
+class AdminReviewModerationView(APIView):
+    """
+    PATCH /admin/reviews/{id}/moderate/ — Platform Admin approves or rejects review.
+    """
+    permission_classes = [IsPlatformAdmin]
+
+    def patch(self, request, id):
+        review = Review.objects.filter(id=id).first()
+        if not review:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Review not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AdminReviewModerationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        updated_review = review_service.moderate_review(
+            review=review,
+            status=serializer.validated_data["moderation_status"],
+        )
+        return Response(ReviewSerializer(updated_review).data, status=status.HTTP_200_OK)
+
+
+class ProductQuestionViewSet(viewsets.ModelViewSet):
+    """
+    GET /products/{product_id}/questions/ — Public list of approved questions.
+    POST /products/{product_id}/questions/ — Authenticated user posts question.
+    """
+    serializer_class = ProductQuestionSerializer
+
+    def get_permissions(self):
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            return [IsAuthenticated()]
+        return [AllowAny()]
+
+    def get_queryset(self):
+        product_id = self.kwargs.get("product_id")
+        qs = ProductQuestion.objects.filter(is_approved=True)
+        if product_id:
+            qs = qs.filter(product_id=product_id)
+        return qs.select_related("user").prefetch_related("answers__user")
+
+    def create(self, request, *args, **kwargs):
+        product_id = self.kwargs.get("product_id")
+        product = Product.objects.filter(id=product_id, is_deleted=False).first()
+        if not product:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Product not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProductQuestionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        question = ProductQuestion.objects.create(
+            product=product,
+            user=request.user,
+            question=serializer.validated_data["question"],
+            is_approved=True,
+        )
+        return Response(ProductQuestionSerializer(question).data, status=status.HTTP_201_CREATED)
+
+
+class ProductAnswerView(APIView):
+    """
+    POST /products/{pid}/questions/{id}/answers/ — Vendor or community answers question.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pid, id):
+        question = ProductQuestion.objects.filter(id=id, product_id=pid).select_related("product__vendor").first()
+        if not question:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Question not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = ProductAnswerCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        vendor = _get_vendor_for_user(request.user)
+        is_vendor = vendor and question.product.vendor == vendor
+
+        answer = ProductAnswer.objects.create(
+            question=question,
+            user=request.user,
+            answer=serializer.validated_data["answer"],
+            is_vendor_response=bool(is_vendor),
+        )
+        return Response(ProductAnswerSerializer(answer).data, status=status.HTTP_201_CREATED)
+

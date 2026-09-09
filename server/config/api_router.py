@@ -8,6 +8,7 @@ from catalog.urls import (
     brand_urlpatterns,
     product_urlpatterns,
     wishlist_urlpatterns,
+    review_urlpatterns,
     admin_urlpatterns as catalog_admin_urls,
 )
 from warehouse.urls import (
@@ -31,6 +32,7 @@ from shipping.urls import (
 )
 from orders.urls import (
     order_urlpatterns,
+    returns_urlpatterns,
     checkout_order_urlpatterns,
     orders_admin_urls,
 )
@@ -96,6 +98,10 @@ urlpatterns = [
 
     # Sprint 11 — Online Payments & Webhooks
     path("payments/", include("payments.urls")),
+
+    # Sprint 14 — Reverse Logistics & Reviews
+    path("returns/", include((returns_urlpatterns, "returns"))),
+    path("reviews/", include((review_urlpatterns, "reviews"))),
 
     # All admin sub-patterns merged under a single admin/ prefix
     path("admin/", include((combined_admin_urls, "admin-api"))),

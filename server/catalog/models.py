@@ -343,3 +343,147 @@ class BulkImportJob(BaseModel):
 
     def __str__(self):
         return f"BulkImport {self.job_id} ({self.status})"
+
+
+# ── Sprint 14: Reviews, Ratings & Product Q&A ─────────────────────────────────
+
+class ReviewModerationStatus(models.TextChoices):
+    PENDING  = "pending",  "Pending Moderation"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class Review(BaseModel):
+    """
+    Customer product review with rating, optional media, and verified purchase indicator.
+    """
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reviews",
+    )
+    order_item = models.OneToOneField(
+        "orders.OrderItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="review",
+    )
+    rating = models.PositiveSmallIntegerField(
+        choices=[(1, "1 Star"), (2, "2 Stars"), (3, "3 Stars"), (4, "4 Stars"), (5, "5 Stars")],
+        db_index=True,
+    )
+    title = models.CharField(max_length=200)
+    comment = models.TextField()
+    is_verified_purchase = models.BooleanField(default=False)
+    moderation_status = models.CharField(
+        max_length=20,
+        choices=ReviewModerationStatus.choices,
+        default=ReviewModerationStatus.APPROVED,
+        db_index=True,
+    )
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["product", "moderation_status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.rating}★ Review for {self.product.title} by {self.user.email}"
+
+
+class ReviewMedia(BaseModel):
+    """
+    User-uploaded photos or videos attached to a product review.
+    """
+    review = models.ForeignKey(
+        Review,
+        on_delete=models.CASCADE,
+        related_name="media",
+    )
+    media_url = models.URLField()
+    media_type = models.CharField(max_length=20, default="image")
+
+    class Meta(BaseModel.Meta):
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Media for Review {self.review.id.hex[:8]}"
+
+
+class ReviewReply(BaseModel):
+    """
+    Official vendor reply to a customer product review (max one per review).
+    """
+    review = models.OneToOneField(
+        Review,
+        on_delete=models.CASCADE,
+        related_name="reply",
+    )
+    vendor_staff = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="review_replies",
+    )
+    comment = models.TextField()
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Vendor Reply to Review {self.review.id.hex[:8]}"
+
+
+class ProductQuestion(BaseModel):
+    """
+    Customer question posted on a product detail page.
+    """
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="questions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="product_questions",
+    )
+    question = models.TextField()
+    is_approved = models.BooleanField(default=True, db_index=True)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Q: {self.question[:50]}... ({self.product.title})"
+
+
+class ProductAnswer(BaseModel):
+    """
+    Vendor or community answer to a customer product question.
+    """
+    question = models.ForeignKey(
+        ProductQuestion,
+        on_delete=models.CASCADE,
+        related_name="answers",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="product_answers",
+    )
+    answer = models.TextField()
+    is_vendor_response = models.BooleanField(default=False)
+
+    class Meta(BaseModel.Meta):
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"A by {self.user.email}: {self.answer[:50]}..."
+

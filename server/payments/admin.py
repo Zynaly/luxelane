@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import PaymentAttempt, Transaction, SavedCard, WebhookEvent, EscrowHold, CODCollection
+from .models import PaymentAttempt, Transaction, SavedCard, WebhookEvent, EscrowHold, CODCollection, Refund
 
 
 @admin.register(PaymentAttempt)
@@ -36,7 +36,7 @@ class WebhookEventAdmin(admin.ModelAdmin):
 
 @admin.register(EscrowHold)
 class EscrowHoldAdmin(admin.ModelAdmin):
-    list_display = ["vendor_order", "vendor", "net_vendor_amount", "gross_amount", "status", "eligible_at", "released_at"]
+    list_display = ["vendor_order", "vendor", "net_vendor_amount", "gross_amount", "status", "frozen_by_rma", "eligible_at", "released_at"]
     list_filter = ["status", "currency"]
     search_fields = ["vendor_order__order__order_number", "vendor__display_name", "release_reference"]
     readonly_fields = ["id", "created_at", "updated_at", "held_at"]
@@ -48,4 +48,13 @@ class CODCollectionAdmin(admin.ModelAdmin):
     list_filter = ["status", "currency"]
     search_fields = ["order__order_number", "receipt_number", "otp_code"]
     readonly_fields = ["id", "created_at", "updated_at"]
+
+
+@admin.register(Refund)
+class RefundAdmin(admin.ModelAdmin):
+    list_display = ["id", "order", "amount", "currency", "method", "status", "return_request", "created_at"]
+    list_filter = ["method", "status", "currency"]
+    search_fields = ["id", "order__order_number", "gateway_refund_id"]
+    readonly_fields = ["id", "created_at", "updated_at"]
+
 

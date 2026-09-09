@@ -38,6 +38,11 @@ from catalog.views import (
     AdminProductModerationView,
     VendorProductBulkImportView,
     BulkImportStatusView,
+    ProductReviewViewSet,
+    ReviewReplyView,
+    AdminReviewModerationView,
+    ProductQuestionViewSet,
+    ProductAnswerView,
 )
 
 # ── Category router ───────────────────────────────────────────────────────────
@@ -70,8 +75,17 @@ product_urlpatterns = [
     # Variants CRUD nested under product
     path("<uuid:product_id>/variants/", ProductVariantViewSet.as_view({"get": "list", "post": "create"}), name="product-variants-list"),
     path("<uuid:pid>/variants/<uuid:pk>/", ProductVariantViewSet.as_view({"get": "retrieve", "patch": "partial_update", "put": "update", "delete": "destroy"}), name="product-variant-detail"),
+    # Reviews & Questions (Sprint 14)
+    path("<uuid:product_id>/reviews/", ProductReviewViewSet.as_view({"get": "list", "post": "create"}), name="product-reviews-list"),
+    path("<uuid:product_id>/questions/", ProductQuestionViewSet.as_view({"get": "list", "post": "create"}), name="product-questions-list"),
+    path("<uuid:pid>/questions/<uuid:id>/answers/", ProductAnswerView.as_view(), name="product-question-answers"),
     # Base product router (list, retrieve, create, update, delete)
     path("", include(product_router.urls)),
+]
+
+# ── Review patterns (/reviews/...) ────────────────────────────────────────────
+review_urlpatterns = [
+    path("<uuid:id>/reply/", ReviewReplyView.as_view(), name="review-reply"),
 ]
 
 # ── Wishlist router ───────────────────────────────────────────────────────────
@@ -101,4 +115,5 @@ admin_urlpatterns = [
     path("products/", AdminProductListView.as_view(), name="admin-product-list"),
     path("products/<uuid:id>/approve/", AdminProductModerationView.as_view(), {"action_type": "approve"}, name="admin-product-approve"),
     path("products/<uuid:id>/reject/", AdminProductModerationView.as_view(), {"action_type": "reject"}, name="admin-product-reject"),
+    path("reviews/<uuid:id>/moderate/", AdminReviewModerationView.as_view(), name="admin-review-moderate"),
 ]

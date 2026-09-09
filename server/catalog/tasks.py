@@ -135,3 +135,13 @@ def process_bulk_import(self, job_id: str):
         job.result_json = results
         job.save(update_fields=["status", "error_message", "result_json", "updated_at"])
         raise self.retry(exc=exc, countdown=30)
+
+
+@shared_task(name="catalog.recalculate_product_rating")
+def recalculate_product_rating_task(product_id: str):
+    """
+    Asynchronously recomputes rating_avg and rating_count for a product.
+    """
+    from catalog.services.reviews import review_service
+    review_service.recalculate_product_ratings(product_id)
+

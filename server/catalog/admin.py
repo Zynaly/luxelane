@@ -3,7 +3,8 @@ from django.contrib import admin
 from mptt.admin import MPTTModelAdmin
 
 from catalog.models import (
-    Category, Brand, Product, ProductImage, ProductTag, BulkImportJob
+    Category, Brand, Product, ProductImage, ProductTag, BulkImportJob,
+    Review, ReviewMedia, ReviewReply, ProductQuestion, ProductAnswer
 )
 
 
@@ -49,3 +50,35 @@ class BulkImportJobAdmin(admin.ModelAdmin):
     list_display = ["job_id", "vendor", "status", "total_rows", "processed_rows", "created_at"]
     list_filter = ["status"]
     readonly_fields = ["job_id", "created_at", "updated_at"]
+
+
+class ReviewMediaInline(admin.TabularInline):
+    model = ReviewMedia
+    extra = 0
+
+
+class ReviewReplyInline(admin.StackedInline):
+    model = ReviewReply
+    extra = 0
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ["id", "product", "user", "rating", "is_verified_purchase", "moderation_status", "created_at"]
+    list_filter = ["rating", "is_verified_purchase", "moderation_status"]
+    search_fields = ["title", "comment", "user__email", "product__title"]
+    inlines = [ReviewMediaInline, ReviewReplyInline]
+
+
+class ProductAnswerInline(admin.TabularInline):
+    model = ProductAnswer
+    extra = 0
+
+
+@admin.register(ProductQuestion)
+class ProductQuestionAdmin(admin.ModelAdmin):
+    list_display = ["id", "product", "user", "question", "is_approved", "created_at"]
+    list_filter = ["is_approved"]
+    search_fields = ["question", "user__email", "product__title"]
+    inlines = [ProductAnswerInline]
+

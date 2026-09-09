@@ -11,6 +11,8 @@ from orders.models import (
     Invoice,
     IdempotencyKey,
     OutboxEvent,
+    ReturnRequest,
+    ReturnShipment,
 )
 
 
@@ -80,3 +82,17 @@ class OutboxEventAdmin(admin.ModelAdmin):
     list_display = ["event_type", "status", "retry_count", "published_at", "created_at"]
     list_filter = ["status", "event_type"]
     search_fields = ["event_type"]
+
+
+@admin.register(ReturnRequest)
+class ReturnRequestAdmin(admin.ModelAdmin):
+    list_display = ["id", "order_item", "user", "status", "reason", "requested_at", "closed_at"]
+    list_filter = ["status", "requested_at"]
+    search_fields = ["id", "order_item__variant_sku_snapshot", "user__email"]
+
+
+@admin.register(ReturnShipment)
+class ReturnShipmentAdmin(admin.ModelAdmin):
+    list_display = ["tracking_number", "return_request", "carrier", "created_at"]
+    search_fields = ["tracking_number"]
+

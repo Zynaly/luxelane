@@ -191,3 +191,45 @@ class CODVerifyOTPSerializer(serializers.Serializer):
     otp_code = serializers.CharField(max_length=6, min_length=6, required=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
+
+# ── Sprint 14: Refund Serializers ───────────────────────────────────────────
+
+from payments.models import Refund, RefundMethod, RefundStatus
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField(source="order.order_number", read_only=True)
+    processed_by_email = serializers.CharField(source="processed_by.email", read_only=True, allow_null=True)
+
+    class Meta:
+        model = Refund
+        fields = [
+            "id",
+            "order",
+            "order_number",
+            "vendor_order",
+            "return_request",
+            "amount",
+            "currency",
+            "method",
+            "status",
+            "reason",
+            "ledger_entry_group_id",
+            "processed_by",
+            "processed_by_email",
+            "gateway_refund_id",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class OrderRefundCreateSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0.01)
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
+    method = serializers.ChoiceField(
+        choices=RefundMethod.choices,
+        default=RefundMethod.ORIGINAL_PAYMENT,
+    )
+
+

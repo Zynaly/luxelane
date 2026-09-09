@@ -943,7 +943,127 @@ export const ProductAPI = {
     const qs = q.toString() ? `?${q.toString()}` : '';
     return apiRequest<SearchResultPayload>(`/products/search/${qs}`, { method: 'GET' });
   },
+
+  // Reviews & Q&A (Sprint 14)
+  listReviews: async (productId: string): Promise<ProductReview[]> => {
+    const res = await apiRequest<any>(`/products/${productId}/reviews/`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  createReview: async (productId: string, data: {
+    rating: number;
+    title: string;
+    comment: string;
+    order_item_id?: string;
+    media_urls?: string[];
+  }): Promise<ProductReview> => {
+    return apiRequest<ProductReview>(`/products/${productId}/reviews/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  replyReview: async (reviewId: string, comment: string): Promise<ReviewReply> => {
+    return apiRequest<ReviewReply>(`/reviews/${reviewId}/reply/`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
+    });
+  },
+
+  adminModerateReview: async (reviewId: string, moderation_status: 'approved' | 'rejected'): Promise<ProductReview> => {
+    return apiRequest<ProductReview>(`/admin/reviews/${reviewId}/moderate/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ moderation_status }),
+    });
+  },
+
+  listQuestions: async (productId: string): Promise<ProductQuestion[]> => {
+    const res = await apiRequest<any>(`/products/${productId}/questions/`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  createQuestion: async (productId: string, question: string): Promise<ProductQuestion> => {
+    return apiRequest<ProductQuestion>(`/products/${productId}/questions/`, {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  },
+
+  answerQuestion: async (productId: string, questionId: string, answer: string): Promise<ProductAnswer> => {
+    return apiRequest<ProductAnswer>(`/products/${productId}/questions/${questionId}/answers/`, {
+      method: 'POST',
+      body: JSON.stringify({ answer }),
+    });
+  },
 };
+
+// ── Reviews & Q&A Interfaces (Sprint 14) ──────────────────────────────────
+export interface ReviewMedia {
+  id: string;
+  media_url: string;
+  media_type: string;
+  created_at?: string;
+}
+
+export interface ReviewReply {
+  id: string;
+  vendor_staff: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  comment: string;
+  created_at: string;
+}
+
+export interface ProductReview {
+  id: string;
+  product: string;
+  user: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  rating: number;
+  title: string;
+  comment: string;
+  is_verified_purchase: boolean;
+  moderation_status: 'pending' | 'approved' | 'rejected';
+  media: ReviewMedia[];
+  reply?: ReviewReply;
+  created_at: string;
+}
+
+export interface ProductAnswer {
+  id: string;
+  question: string;
+  user: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  answer: string;
+  is_vendor_response: boolean;
+  created_at: string;
+}
+
+export interface ProductQuestion {
+  id: string;
+  product: string;
+  user: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  question: string;
+  is_approved: boolean;
+  answers: ProductAnswer[];
+  created_at: string;
+}
 
 // ── Attribute API (Sprint 5) ──────────────────────────────────────────────────
 export const AttributeAPI = {
@@ -2027,7 +2147,71 @@ export const OrderAPI = {
     const res = await apiRequest<any>(`/admin/orders/${qs}`, { method: 'GET' });
     return res.results || res || [];
   },
+
+  // Reverse Logistics & Returns (Sprint 14)
+  requestReturn: async (orderId: string, itemId: string, data: { reason: string; evidence_media?: string[] }): Promise<ReturnRequest> => {
+    return apiRequest<ReturnRequest>(`/orders/${orderId}/items/${itemId}/return/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  listReturns: async (): Promise<ReturnRequest[]> => {
+    const res = await apiRequest<any>('/returns/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getReturn: async (id: string): Promise<ReturnRequest> => {
+    return apiRequest<ReturnRequest>(`/returns/${id}/`, { method: 'GET' });
+  },
+
+  decideReturn: async (id: string, data: { decision: 'approved' | 'rejected'; rejection_reason?: string }): Promise<ReturnRequest> => {
+    return apiRequest<ReturnRequest>(`/returns/${id}/decision/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  receiveReturn: async (id: string, data: { condition?: string; action?: string; warehouse_id?: string } = {}): Promise<ReturnRequest> => {
+    return apiRequest<ReturnRequest>(`/returns/${id}/receive/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  instantRefund: async (returnId: string): Promise<Refund> => {
+    return apiRequest<Refund>(`/returns/${returnId}/instant-refund/`, {
+      method: 'POST',
+    });
+  },
 };
+
+// ── Reverse Logistics / Return Interfaces (Sprint 14) ───────────────────────
+export type ReturnStatus = 'requested' | 'approved' | 'rejected' | 'in_transit' | 'received' | 'closed';
+
+export interface ReturnShipment {
+  id: string;
+  tracking_number: string;
+  carrier: string;
+  label_url?: string;
+  status: string;
+  shipped_at?: string;
+  delivered_at?: string;
+  created_at: string;
+}
+
+export interface ReturnRequest {
+  id: string;
+  order_item: string;
+  user: any;
+  reason: string;
+  status: ReturnStatus;
+  evidence_media?: string[];
+  rejection_reason?: string;
+  return_shipment?: ReturnShipment;
+  created_at: string;
+  closed_at?: string;
+}
 
 // ── Payment Interfaces & API (Sprint 11) ────────────────────────────────────
 
@@ -2177,7 +2361,44 @@ export interface LedgerReconciliationReport {
   entries_count: number;
 }
 
+// ── Refund Interfaces (Sprint 14) ──────────────────────────────────────────
+export interface Refund {
+  id: string;
+  order: string;
+  vendor_order?: string;
+  return_request?: string;
+  amount: string;
+  currency: string;
+  method: 'original_payment' | 'wallet' | 'manual';
+  status: 'pending' | 'succeeded' | 'failed';
+  reason?: string;
+  gateway_refund_id?: string;
+  ledger_entry_group_id?: string;
+  processed_by?: any;
+  created_at: string;
+}
+
 export const PaymentAPI = {
+  // Order Refunds (Sprint 14)
+  refundOrder: async (orderId: string, data: { amount: string | number; reason?: string; method?: string }): Promise<Refund> => {
+    return apiRequest<Refund>(`/payments/orders/${orderId}/refund/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminListRefunds: async (params: { order_id?: string } = {}): Promise<Refund[]> => {
+    const query = new URLSearchParams();
+    if (params.order_id) query.set('order_id', params.order_id);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/refunds/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  adminGetRefund: async (id: string): Promise<Refund> => {
+    return apiRequest<Refund>(`/admin/refunds/${id}/`, { method: 'GET' });
+  },
+
   getMethods: async (): Promise<PaymentMethodsResponse> => {
     return apiRequest<PaymentMethodsResponse>('/payments/methods/', { method: 'GET' });
   },

@@ -33,13 +33,14 @@ class VendorOrderStatus(models.TextChoices):
 
 
 class OrderItemFulfilmentStatus(models.TextChoices):
-    PENDING   = "pending",   "Pending"
-    ALLOCATED = "allocated", "Allocated"
-    PACKED    = "packed",    "Packed"
-    SHIPPED   = "shipped",   "Shipped"
-    DELIVERED = "delivered", "Delivered"
-    CANCELLED = "cancelled", "Cancelled"
-    RETURNED  = "returned",  "Returned"
+    PENDING          = "pending",          "Pending"
+    ALLOCATED        = "allocated",        "Allocated"
+    PACKED           = "packed",           "Packed"
+    SHIPPED          = "shipped",          "Shipped"
+    DELIVERED        = "delivered",        "Delivered"
+    RETURN_REQUESTED = "return_requested", "Return Requested"
+    CANCELLED        = "cancelled",        "Cancelled"
+    RETURNED         = "returned",         "Returned"
 
 
 # ── Core Order Models ─────────────────────────────────────────────────────────
@@ -304,3 +305,80 @@ class OutboxEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} ({self.status})"
+
+
+# ── Sprint 14: Reverse Logistics (Returns & RMAs) ───────────────────────────
+
+class ReturnStatus(models.TextChoices):
+    REQUESTED     = "requested",     "Requested"
+    APPROVED      = "approved",      "Approved"
+    REJECTED      = "rejected",      "Rejected"
+    ITEM_RECEIVED = "item_received", "Item Received"
+    RESTOCKED     = "restocked",     "Restocked"
+    WRITTEN_OFF   = "written_off",   "Written Off"
+    CLOSED        = "closed",        "Closed"
+
+
+class ReturnRequest(BaseModel):
+    """
+    RMA (Return Merchandise Authorization) request for a specific delivered OrderItem.
+    """
+    order_item = models.ForeignKey(
+        OrderItem,
+        on_delete=models.CASCADE,
+        related_name="return_requests",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="return_requests",
+    )
+    reason = models.CharField(max_length=255)
+    evidence_media = models.JSONField(default=list, blank=True)
+    status = models.CharField(
+        max_length=30,
+        choices=ReturnStatus.choices,
+        default=ReturnStatus.REQUESTED,
+        db_index=True,
+    )
+    rejection_reason = models.TextField(blank=True, default="")
+    requested_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Return Request (RMA)"
+        verbose_name_plural = "Return Requests (RMAs)"
+        ordering = ["-requested_at"]
+
+    def __str__(self):
+        return f"RMA-{self.id.hex[:8].upper()} for {self.order_item} ({self.status})"
+
+
+class ReturnShipment(BaseModel):
+    """
+    Reverse logistics parcel shipment for returning goods to warehouse/vendor.
+    """
+    return_request = models.OneToOneField(
+        ReturnRequest,
+        on_delete=models.CASCADE,
+        related_name="return_shipment",
+    )
+    carrier = models.ForeignKey(
+        "shipping.Carrier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="return_shipments",
+    )
+    tracking_number = models.CharField(max_length=128, db_index=True)
+    tracking_url = models.URLField(blank=True, default="")
+    label_url = models.URLField(blank=True, default="")
+
+    class Meta:
+        verbose_name = "Return Shipment"
+        verbose_name_plural = "Return Shipments"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"ReturnShipment {self.tracking_number} (RMA {self.return_request.id.hex[:8]})"
+

@@ -532,3 +532,54 @@ class AdminLedgerReconciliationView(APIView):
         report = ledger_service.reconcile()
         return Response(report)
 
+
+# ── Sprint 14: Refund Views ──────────────────────────────────────────────────
+
+from payments.models import Refund
+from payments.serializers import RefundSerializer, OrderRefundCreateSerializer
+from payments.services.refund_service import refund_service
+
+
+class OrderRefundView(APIView):
+    """
+    POST /orders/{id}/refund/ — FinanceAdmin issues manual or partial refund for an order.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def post(self, request, id):
+        serializer = OrderRefundCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from orders.models import Order
+        order = Order.objects.filter(id=id).first()
+        if not order:
+            return Response({"error": {"code": "NOT_FOUND", "message": "Order not found."}}, status=status.HTTP_404_NOT_FOUND)
+
+        data = serializer.validated_data
+        refund = refund_service.process_order_refund(
+            order=order,
+            amount=data["amount"],
+            reason=data.get("reason", ""),
+            method=data.get("method"),
+            processed_by=request.user,
+        )
+        return Response(RefundSerializer(refund).data, status=status.HTTP_201_CREATED)
+
+
+class AdminRefundViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /admin/refunds/ — List all refunds for FinanceAdmin & PlatformAdmin.
+    GET /admin/refunds/{id}/ — Retrieve refund detail.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+    serializer_class = RefundSerializer
+    queryset = Refund.objects.all().select_related("order", "vendor_order", "return_request", "processed_by")
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        order_id = self.request.query_params.get("order_id")
+        if order_id:
+            qs = qs.filter(order_id=order_id)
+        return qs
+
+

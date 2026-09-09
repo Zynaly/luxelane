@@ -236,6 +236,14 @@ class EscrowHold(BaseModel):
     eligible_at = models.DateTimeField(null=True, blank=True, db_index=True)
     released_at = models.DateTimeField(null=True, blank=True)
     release_reference = models.CharField(max_length=100, blank=True, default="")
+    frozen_by_rma = models.ForeignKey(
+        "orders.ReturnRequest",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="frozen_escrow_holds",
+        help_text="Reference to open RMA freezing escrow release",
+    )
     notes = models.TextField(blank=True, default="")
 
     class Meta:
@@ -286,4 +294,77 @@ class CODCollection(BaseModel):
 
     def __str__(self):
         return f"CODCollection {self.order.order_number} - {self.status} (${self.amount})"
+
+
+# ── Sprint 14: Refunds ───────────────────────────────────────────────────────
+
+class RefundMethod(models.TextChoices):
+    ORIGINAL_PAYMENT = "original_payment", "Original Payment Method"
+    WALLET           = "wallet",           "Store Credit Wallet"
+    MANUAL           = "manual",           "Manual Offline Refund"
+
+
+class RefundStatus(models.TextChoices):
+    PENDING   = "pending",   "Pending"
+    SUCCEEDED = "succeeded", "Succeeded"
+    FAILED    = "failed",    "Failed"
+
+
+class Refund(BaseModel):
+    """
+    Tracks customer payment refund or store credit deposit resulting from
+    an approved return request or an administrative adjustment.
+    """
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="refunds",
+    )
+    vendor_order = models.ForeignKey(
+        "orders.VendorOrder",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="refunds",
+    )
+    return_request = models.OneToOneField(
+        "orders.ReturnRequest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="refund",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="USD")
+    method = models.CharField(
+        max_length=30,
+        choices=RefundMethod.choices,
+        default=RefundMethod.ORIGINAL_PAYMENT,
+        db_index=True,
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=RefundStatus.choices,
+        default=RefundStatus.PENDING,
+        db_index=True,
+    )
+    reason = models.TextField(blank=True, default="")
+    ledger_entry_group_id = models.UUIDField(null=True, blank=True, db_index=True)
+    processed_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="processed_refunds",
+    )
+    gateway_refund_id = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Refund"
+        verbose_name_plural = "Refunds"
+
+    def __str__(self):
+        return f"Refund {self.id.hex[:8]} - ${self.amount} ({self.status}) for Order {self.order.order_number}"
+
 

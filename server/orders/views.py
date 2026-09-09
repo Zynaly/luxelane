@@ -348,3 +348,165 @@ class AdminOrderViewSet(viewsets.ReadOnlyModelViewSet):
         if status_param:
             qs = qs.filter(status=status_param)
         return qs
+
+
+# ── Sprint 14: Return Requests & Reverse Logistics Views ─────────────────────
+
+from orders.models import ReturnRequest, ReturnShipment, ReturnStatus
+from orders.serializers import (
+    ReturnRequestSerializer,
+    ReturnRequestCreateSerializer,
+    ReturnDecisionSerializer,
+    ReturnReceiveSerializer,
+)
+from orders.services.returns import return_service
+
+
+class ReturnRequestCreateView(APIView):
+    """
+    POST /orders/{id}/items/{item_id}/return/ — Customer initiates an RMA return request.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id, item_id):
+        serializer = ReturnRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        order_item = (
+            OrderItem.objects.filter(id=item_id, vendor_order__order_id=id)
+            .select_related("vendor_order__order", "vendor_order__vendor")
+            .first()
+        )
+        if not order_item:
+            raise NotFound("Order item not found.")
+
+        rma = return_service.create_return_request(
+            order_item=order_item,
+            user=request.user,
+            reason=serializer.validated_data["reason"],
+            evidence_media=serializer.validated_data.get("evidence_media"),
+        )
+        return Response(ReturnRequestSerializer(rma).data, status=status.HTTP_201_CREATED)
+
+
+class ReturnRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /returns/ — List RMA return requests scoped to customer, vendor staff, or admin.
+    GET /returns/{id}/ — Retrieve RMA return details.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = ReturnRequestSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        role = getattr(user, "role", "")
+        if role in ["super_admin", "platform_admin", "finance_admin"]:
+            return ReturnRequest.objects.all().select_related(
+                "order_item__vendor_order__order", "user", "return_shipment"
+            )
+
+        vendor = _get_user_vendor(user)
+        if vendor:
+            return ReturnRequest.objects.filter(
+                order_item__vendor_order__vendor=vendor
+            ).select_related("order_item__vendor_order__order", "user", "return_shipment")
+
+        return ReturnRequest.objects.filter(user=user).select_related(
+            "order_item__vendor_order__order", "user", "return_shipment"
+        )
+
+
+class ReturnDecisionView(APIView):
+    """
+    PATCH /returns/{id}/decision/ — Vendor approves or rejects an RMA.
+    Approval creates ReturnShipment and freezes escrow.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, id):
+        serializer = ReturnDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        rma = ReturnRequest.objects.filter(id=id).select_related(
+            "order_item__vendor_order__vendor", "order_item__vendor_order"
+        ).first()
+        if not rma:
+            raise NotFound("Return request not found.")
+
+        user = request.user
+        role = getattr(user, "role", "")
+        if role not in ["super_admin", "platform_admin", "finance_admin"]:
+            vendor = _get_user_vendor(user)
+            if not vendor or rma.order_item.vendor_order.vendor != vendor:
+                raise PermissionDenied("You do not have permission to decide on this return request.")
+
+        updated_rma = return_service.decide_return(
+            return_request=rma,
+            decision=serializer.validated_data["decision"],
+            user=user,
+            rejection_reason=serializer.validated_data.get("rejection_reason", ""),
+        )
+        return Response(ReturnRequestSerializer(updated_rma).data, status=status.HTTP_200_OK)
+
+
+class ReturnReceiveView(APIView):
+    """
+    POST /returns/{id}/receive/ — Warehouse receives returned package and restocks/writes off.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id):
+        serializer = ReturnReceiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        rma = ReturnRequest.objects.filter(id=id).select_related(
+            "order_item__vendor_order__vendor", "order_item__variant"
+        ).first()
+        if not rma:
+            raise NotFound("Return request not found.")
+
+        warehouse = None
+        wh_id = serializer.validated_data.get("warehouse_id")
+        if wh_id:
+            from warehouse.models import Warehouse
+            warehouse = Warehouse.objects.filter(id=wh_id).first()
+
+        updated_rma = return_service.receive_return(
+            return_request=rma,
+            condition=serializer.validated_data.get("condition", "restockable"),
+            action=serializer.validated_data.get("action", "restock"),
+            warehouse=warehouse,
+            performed_by=request.user,
+        )
+        return Response(ReturnRequestSerializer(updated_rma).data, status=status.HTTP_200_OK)
+
+
+class InstantRefundView(APIView):
+    """
+    POST /returns/{id}/instant-refund/ — Vendor or Finance Admin issues immediate wallet store credit refund.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, id):
+        rma = ReturnRequest.objects.filter(id=id).select_related(
+            "order_item__vendor_order__order", "order_item__vendor_order__vendor"
+        ).first()
+        if not rma:
+            raise NotFound("Return request not found.")
+
+        user = request.user
+        role = getattr(user, "role", "")
+        if role not in ["super_admin", "platform_admin", "finance_admin"]:
+            vendor = _get_user_vendor(user)
+            if not vendor or rma.order_item.vendor_order.vendor != vendor:
+                raise PermissionDenied("You do not have permission to issue instant refund for this return.")
+
+        from payments.services.refund_service import refund_service
+        from payments.serializers import RefundSerializer
+
+        refund = refund_service.process_instant_refund(
+            return_request=rma,
+            performed_by=user,
+        )
+        return Response(RefundSerializer(refund).data, status=status.HTTP_200_OK)
+

@@ -17,6 +17,8 @@ from payments.views import (
     AdminLedgerAccountViewSet,
     AdminLedgerEntryViewSet,
     AdminLedgerReconciliationView,
+    OrderRefundView,
+    AdminRefundViewSet,
 )
 
 urlpatterns = [
@@ -41,6 +43,8 @@ urlpatterns = [
     # Cash on Delivery (COD) (Sprint 12)
     path("cod/<uuid:order_id>/send-otp/", CODSendOTPView.as_view(), name="cod-send-otp"),
     path("cod/<uuid:order_id>/collect/", CODCollectView.as_view(), name="cod-collect"),
+    # Order Refund (Sprint 14)
+    path("orders/<uuid:id>/refund/", OrderRefundView.as_view(), name="order-refund-direct"),
 ]
 
 admin_urlpatterns = [
@@ -52,6 +56,9 @@ admin_urlpatterns = [
     path("ledger/accounts/", AdminLedgerAccountViewSet.as_view({"get": "list"}), name="admin-ledger-accounts"),
     path("ledger/entries/", AdminLedgerEntryViewSet.as_view({"get": "list"}), name="admin-ledger-entries"),
     path("ledger/reconcile/", AdminLedgerReconciliationView.as_view(), name="admin-ledger-reconcile"),
+    # Admin Refunds (Sprint 14)
+    path("refunds/", AdminRefundViewSet.as_view({"get": "list"}), name="admin-refunds-list"),
+    path("refunds/<uuid:pk>/", AdminRefundViewSet.as_view({"get": "retrieve"}), name="admin-refunds-detail"),
 ]
 
 
