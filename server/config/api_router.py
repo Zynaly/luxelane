@@ -1,9 +1,18 @@
 """
 API v1 router — include each app's urls as sprints are completed.
-Uncomment each line as the corresponding sprint is finished.
 """
 from django.urls import path, include
 from vendors.urls import admin_urlpatterns as vendor_admin_urls
+from catalog.urls import (
+    category_urlpatterns,
+    brand_urlpatterns,
+    product_urlpatterns,
+    wishlist_urlpatterns,
+    admin_urlpatterns as catalog_admin_urls,
+)
+
+# Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
+combined_admin_urls = vendor_admin_urls + catalog_admin_urls
 
 urlpatterns = [
     # Sprint 0 — no domain endpoints (health is at root level)
@@ -20,52 +29,13 @@ urlpatterns = [
 
     # Sprint 3 — Vendors
     path("vendors/", include("vendors.urls")),
-    path("admin/", include(vendor_admin_urls)),
 
-    # Sprint 4 — Catalog
-    # path("categories/", include("catalog.urls.categories")),
-    # path("brands/", include("catalog.urls.brands")),
-    # path("products/", include("catalog.urls.products")),
+    # Sprint 4 & 5 — Catalog (public endpoints)
+    path("categories/", include((category_urlpatterns, "categories"))),
+    path("brands/", include((brand_urlpatterns, "brands"))),
+    path("products/", include((product_urlpatterns, "products"))),
+    path("wishlist/", include((wishlist_urlpatterns, "wishlist"))),
 
-    # Sprint 5 — Variants / Search / Wishlist
-    # (variants are nested under products — no new prefix)
-    # path("wishlist/", include("catalog.urls.wishlist")),
-
-    # Sprint 6 — Warehouse / Inventory
-    # path("warehouses/", include("warehouse.urls")),
-    # path("inventory/", include("warehouse.urls.inventory")),
-    # path("stock-movements/", include("warehouse.urls.stock")),
-    # path("stock-transfers/", include("warehouse.urls.transfers")),
-    # path("purchase-orders/", include("warehouse.urls.purchase_orders")),
-
-    # Sprint 8 — Cart / Pricing
-    # path("cart/", include("cart_and_pricing.urls.cart")),
-    # path("coupons/", include("cart_and_pricing.urls.coupons")),
-    # path("checkout/", include("cart_and_pricing.urls.checkout")),
-
-    # Sprint 9 — Shipping
-    # path("shipping/", include("shipping.urls")),
-
-    # Sprint 10 — Orders
-    # path("orders/", include("orders.urls")),
-    # path("checkout/", include("orders.urls.checkout")),
-
-    # Sprint 11 — Payments
-    # path("payments/", include("payments.urls")),
-
-    # Sprint 12 — Wallet / COD / Ledger
-    # path("wallet/", include("payments.urls.wallet")),
-
-    # Sprint 13 — Shipments / Tracking
-    # path("shipments/", include("shipping.urls.shipments")),
-
-    # Sprint 14 — Returns / Refunds / Reviews
-    # path("returns/", include("shipping.urls.returns")),
-    # path("reviews/", include("catalog.urls.reviews")),
-
-    # Sprint 15 — Payouts / Admin Reporting
-    # (already nested under vendors/ and admin/ above)
-
-    # Admin namespace (shared across all sprints)
-    # path("admin/", include("core.urls.admin")),
+    # All admin sub-patterns (Sprint 3 + Sprint 4/5) merged under a single admin/ prefix
+    path("admin/", include((combined_admin_urls, "admin-api"))),
 ]

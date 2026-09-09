@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../components/Icon';
+import { VendorProductsTab } from './VendorProductsTab';
 import API, {
   VendorProfile,
   VendorDocItem,
@@ -20,7 +21,7 @@ interface VendorDashboardProps {
   onViewStorefront?: (slug: string) => void;
 }
 
-type VendorTab = 'overview' | 'profile' | 'kyc' | 'banking' | 'staff' | 'policies';
+type VendorTab = 'overview' | 'products' | 'profile' | 'kyc' | 'banking' | 'staff' | 'policies';
 
 export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   user,
@@ -419,6 +420,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
         <div className="flex space-x-1 border-b border-gray-200 mb-8 overflow-x-auto pb-1">
           {[
             { id: 'overview', label: 'Overview', icon: 'dashboard' },
+            { id: 'products', label: 'Products', icon: 'products' },
             { id: 'profile', label: 'Store Branding', icon: 'user' },
             { id: 'kyc', label: 'KYC & Compliance', icon: 'check' },
             { id: 'banking', label: 'Bank & Payouts', icon: 'cart' },
@@ -1129,6 +1131,10 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                   </button>
                 </div>
               </form>
+            )}
+            {/* ── TAB: PRODUCTS (SPRINT 4) ──────────────────────────────────── */}
+            {activeTab === 'products' && (
+              <VendorProductsTab />
             )}
           </div>
         )}

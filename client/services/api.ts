@@ -619,6 +619,420 @@ export const AdminAPI = {
   },
 };
 
+// ── Sprint 4: Catalog API Types ───────────────────────────────────────────────
+export interface CategoryItem {
+  id: string;
+  parent: string | null;
+  name: string;
+  slug: string;
+  icon_url?: string;
+  is_active: boolean;
+  level: number;
+  children?: CategoryItem[];
+  created_at?: string;
+}
+
+export interface BrandItem {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  created_at?: string;
+}
+
+export interface ProductImage {
+  id?: string;
+  image_url: string;
+  sort_order: number;
+  is_primary: boolean;
+}
+
+export interface ProductTag {
+  id?: string;
+  tag: string;
+}
+
+export type ProductStatus = 'draft' | 'pending_review' | 'approved' | 'rejected' | 'archived';
+
+export interface ProductListItem {
+  id: string;
+  title: string;
+  slug: string;
+  base_price: string;
+  primary_image?: string | null;
+  vendor_display_name: string;
+  category_name: string;
+  brand_name?: string | null;
+  rating_avg: string;
+  rating_count: number;
+  status: ProductStatus;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProductAttributeValue {
+  id: string;
+  value: string;
+}
+
+export interface ProductAttribute {
+  id: string;
+  name: string;
+  category?: string | null;
+  category_name?: string | null;
+  values: ProductAttributeValue[];
+  created_at?: string;
+}
+
+export interface VariantAttributeItem {
+  attribute_id: string;
+  attribute_name: string;
+  value_id: string;
+  value: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  product: string;
+  sku: string;
+  barcode?: string | null;
+  price: string;
+  compare_at_price?: string | null;
+  weight_kg: string;
+  length_cm: string;
+  width_cm: string;
+  height_cm: string;
+  is_active: boolean;
+  attributes: VariantAttributeItem[];
+  images: ProductImage[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SearchFacets {
+  categories: Array<{ id: string; name: string; slug: string; count: number }>;
+  brands: Array<{ id: string; name: string; slug: string; count: number }>;
+  price_range: { min: number; max: number };
+  total_results: number;
+}
+
+export interface SearchResultPayload {
+  count: number;
+  results: ProductListItem[];
+  facets: SearchFacets;
+}
+
+export interface WishlistItem {
+  id: string;
+  product: ProductListItem;
+  created_at: string;
+}
+
+export interface ProductDetail extends ProductListItem {
+  description: string;
+  rejection_reason?: string;
+  images: ProductImage[];
+  tags: ProductTag[];
+  variants?: ProductVariant[];
+  vendor_info: { id: string; display_name: string; slug: string };
+  category_info: { id: string; name: string; slug: string };
+  brand_info?: { id: string; name: string; slug: string } | null;
+  updated_at: string;
+}
+
+export interface ProductWritePayload {
+  title: string;
+  description?: string;
+  base_price: string;
+  category: string;
+  brand?: string | null;
+  status?: ProductStatus;
+  is_active?: boolean;
+  images?: ProductImage[];
+  tags?: string[];
+}
+
+export interface BulkImportJobStatus {
+  job_id: string;
+  status: 'queued' | 'processing' | 'done' | 'failed';
+  original_filename: string;
+  total_rows: number;
+  processed_rows: number;
+  results: Array<{ row_number: number; sku: string; status: string; errors: string[] }>;
+  error_message?: string;
+  created_at: string;
+}
+
+// ── Category API (Sprint 4) ───────────────────────────────────────────────────
+export const CategoryAPI = {
+  list: async (): Promise<CategoryItem[]> => {
+    const res = await apiRequest<any>('/categories/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  retrieve: async (id: string): Promise<CategoryItem> => {
+    return apiRequest<CategoryItem>(`/categories/${id}/`, { method: 'GET' });
+  },
+
+  adminCreate: async (data: Partial<CategoryItem>): Promise<CategoryItem> => {
+    return apiRequest<CategoryItem>('/admin/categories/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminUpdate: async (id: string, data: Partial<CategoryItem>): Promise<CategoryItem> => {
+    return apiRequest<CategoryItem>(`/admin/categories/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDelete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/admin/categories/${id}/`, { method: 'DELETE' });
+  },
+
+  adminList: async (): Promise<CategoryItem[]> => {
+    const res = await apiRequest<any>('/admin/categories/', { method: 'GET' });
+    return res.results || res || [];
+  },
+};
+
+// ── Brand API (Sprint 4) ──────────────────────────────────────────────────────
+export const BrandAPI = {
+  list: async (): Promise<BrandItem[]> => {
+    const res = await apiRequest<any>('/brands/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  adminCreate: async (data: { name: string; logo_url?: string }): Promise<BrandItem> => {
+    return apiRequest<BrandItem>('/admin/brands/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminUpdate: async (id: string, data: Partial<BrandItem>): Promise<BrandItem> => {
+    return apiRequest<BrandItem>(`/admin/brands/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminDelete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/admin/brands/${id}/`, { method: 'DELETE' });
+  },
+
+  adminList: async (): Promise<BrandItem[]> => {
+    const res = await apiRequest<any>('/admin/brands/', { method: 'GET' });
+    return res.results || res || [];
+  },
+};
+
+// ── Product API (Sprint 4) ────────────────────────────────────────────────────
+export const ProductAPI = {
+  // Public endpoints
+  list: async (params: { category?: string; brand?: string; search?: string } = {}): Promise<ProductListItem[]> => {
+    const q = new URLSearchParams();
+    if (params.category) q.set('category', params.category);
+    if (params.brand) q.set('brand', params.brand);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/products/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  retrieve: async (id: string): Promise<ProductDetail> => {
+    return apiRequest<ProductDetail>(`/products/${id}/`, { method: 'GET' });
+  },
+
+  // Vendor endpoints
+  myList: async (params: { status?: string; search?: string } = {}): Promise<ProductListItem[]> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/vendors/me/products/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  myCreate: async (data: ProductWritePayload): Promise<ProductDetail> => {
+    return apiRequest<ProductDetail>('/vendors/me/products/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  myUpdate: async (id: string, data: Partial<ProductWritePayload>): Promise<ProductDetail> => {
+    return apiRequest<ProductDetail>(`/vendors/me/products/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  myDelete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/vendors/me/products/${id}/`, { method: 'DELETE' });
+  },
+
+  // Bulk import
+  bulkImport: async (rawCsv: string, filename?: string): Promise<{ job_id: string; status: string }> => {
+    return apiRequest<{ job_id: string; status: string }>('/vendors/me/products/bulk-import/', {
+      method: 'POST',
+      body: JSON.stringify({ raw_csv: rawCsv }),
+    });
+  },
+
+  bulkImportStatus: async (jobId: string): Promise<BulkImportJobStatus> => {
+    return apiRequest<BulkImportJobStatus>(`/vendors/me/products/bulk-import/${jobId}/`, { method: 'GET' });
+  },
+
+  // Admin endpoints
+  adminList: async (params: { status?: string; vendor?: string; search?: string } = {}): Promise<ProductListItem[]> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    if (params.vendor) q.set('vendor', params.vendor);
+    if (params.search) q.set('search', params.search);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/products/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  adminApprove: async (id: string): Promise<{ detail: string; status: string }> => {
+    return apiRequest<{ detail: string; status: string }>(`/admin/products/${id}/approve/`, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    });
+  },
+
+  adminReject: async (id: string, rejection_reason: string): Promise<{ detail: string; status: string }> => {
+    return apiRequest<{ detail: string; status: string }>(`/admin/products/${id}/reject/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ rejection_reason }),
+    });
+  },
+
+  related: async (id: string): Promise<ProductListItem[]> => {
+    const res = await apiRequest<any>(`/products/${id}/related/`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  search: async (params: {
+    q?: string;
+    category?: string;
+    brand?: string;
+    vendor?: string;
+    price_min?: string;
+    price_max?: string;
+    rating_min?: string;
+    attribute_value?: string;
+    ordering?: string;
+  } = {}): Promise<SearchResultPayload> => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) q.set(k, v);
+    });
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest<SearchResultPayload>(`/products/search/${qs}`, { method: 'GET' });
+  },
+};
+
+// ── Attribute API (Sprint 5) ──────────────────────────────────────────────────
+export const AttributeAPI = {
+  list: async (params: { category?: string } = {}): Promise<ProductAttribute[]> => {
+    const q = new URLSearchParams();
+    if (params.category) q.set('category', params.category);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/products/attributes/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  create: async (data: { name: string; category?: string; values_write?: string[] }): Promise<ProductAttribute> => {
+    return apiRequest<ProductAttribute>('/products/attributes/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  addValue: async (attributeId: string, value: string): Promise<ProductAttributeValue> => {
+    return apiRequest<ProductAttributeValue>(`/products/attributes/${attributeId}/values/`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
+    });
+  },
+};
+
+// ── Variant API (Sprint 5) ────────────────────────────────────────────────────
+export const VariantAPI = {
+  list: async (productId: string): Promise<ProductVariant[]> => {
+    const res = await apiRequest<any>(`/products/${productId}/variants/`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  create: async (productId: string, data: {
+    sku: string;
+    price: string;
+    compare_at_price?: string;
+    barcode?: string;
+    attribute_value_ids?: string[];
+    is_active?: boolean;
+  }): Promise<ProductVariant> => {
+    return apiRequest<ProductVariant>(`/products/${productId}/variants/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (productId: string, variantId: string, data: Partial<ProductVariant>): Promise<ProductVariant> => {
+    return apiRequest<ProductVariant>(`/products/${productId}/variants/${variantId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (productId: string, variantId: string): Promise<void> => {
+    return apiRequest<void>(`/products/${productId}/variants/${variantId}/`, {
+      method: 'DELETE',
+    });
+  },
+
+  generate: async (productId: string, data: {
+    attribute_groups: string[][];
+    base_price?: string;
+    sku_prefix?: string;
+  }): Promise<{ detail: string; count: number; variants: ProductVariant[] }> => {
+    return apiRequest<{ detail: string; count: number; variants: ProductVariant[] }>(`/products/${productId}/variants/generate/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// ── Wishlist API (Sprint 5) ───────────────────────────────────────────────────
+export const WishlistAPI = {
+  list: async (): Promise<WishlistItem[]> => {
+    const res = await apiRequest<any>('/wishlist/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  add: async (productId: string): Promise<WishlistItem> => {
+    return apiRequest<WishlistItem>('/wishlist/', {
+      method: 'POST',
+      body: JSON.stringify({ product_id: productId }),
+    });
+  },
+
+  remove: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/wishlist/${id}/`, { method: 'DELETE' });
+  },
+
+  toggle: async (productId: string): Promise<{ in_wishlist: boolean; detail: string }> => {
+    return apiRequest<{ in_wishlist: boolean; detail: string }>('/wishlist/toggle/', {
+      method: 'POST',
+      body: JSON.stringify({ product_id: productId }),
+    });
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -628,5 +1042,11 @@ export default {
   Notification: NotificationAPI,
   Vendor: VendorAPI,
   Admin: AdminAPI,
+  Category: CategoryAPI,
+  Brand: BrandAPI,
+  Product: ProductAPI,
+  Attribute: AttributeAPI,
+  Variant: VariantAPI,
+  Wishlist: WishlistAPI,
   Token: TokenService,
 };

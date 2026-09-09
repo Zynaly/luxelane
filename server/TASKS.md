@@ -15,8 +15,8 @@
 | 1 | Identity & RBAC | 15 | ✅ Complete | ██████████ 100% |
 | 2 | Profiles, Addresses, Media, Audit, Notifications | 7 | ✅ Complete | ██████████ 100% |
 | 3 | Vendors, KYC, Staff, Commission | 15 | ✅ Complete | ██████████ 100% |
-| 4 | Catalog Core & Moderation | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
-| 5 | Variants, Attributes & Search | 9 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 4 | Catalog Core & Moderation | 12 | ✅ Complete | ██████████ 100% |
+| 5 | Variants, Attributes & Search | 9 | ✅ Complete | ██████████ 100% |
 | 6 | Warehouse & Inventory Core | 15 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 7 | Reservations, Allocation & Smart Routing | 2 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 8 | Cart, Pricing & Promotions | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -141,20 +141,20 @@
 
 ### Tasks
 
-- [ ] **S4-T1** Create `catalog` app
-- [ ] **S4-T2** `Category` model with `django-mptt` tree structure
-- [ ] **S4-T3** `Brand`, `Product` (search_vector GIN index), `ProductImage`, `ProductTag` models
-- [ ] **S4-T4** Migrations (incl. GIN index on search_vector)
-- [ ] **S4-T5** `CategoryViewSet` (public read) + `AdminCategoryViewSet` (admin CRUD)
-- [ ] **S4-T6** `BrandViewSet` (public read) + `AdminBrandViewSet` (admin CRUD)
-- [ ] **S4-T7** `ProductViewSet` — public approved list/detail
-- [ ] **S4-T8** `VendorMyProductsViewSet` — vendor's own products (all statuses)
-- [ ] **S4-T9** `AdminProductModerationView` — approve/reject (AuditLog + vendor Notification)
-- [ ] **S4-T10** `VendorProductBulkImportView` — CSV/XLSX → Celery task → `job_id`
-- [ ] **S4-T11** `BulkImportStatusView` — poll job status + per-row report
-- [ ] **S4-T12** Wire all Sprint 4 URLs
+- [x] **S4-T1** Create `catalog` app
+- [x] **S4-T2** `Category` model with `django-mptt` tree structure
+- [x] **S4-T3** `Brand`, `Product` (search_vector GIN index), `ProductImage`, `ProductTag` models
+- [x] **S4-T4** Migrations (incl. GIN index on search_vector)
+- [x] **S4-T5** `CategoryViewSet` (public read) + `AdminCategoryViewSet` (admin CRUD)
+- [x] **S4-T6** `BrandViewSet` (public read) + `AdminBrandViewSet` (admin CRUD)
+- [x] **S4-T7** `ProductViewSet` — public approved list/detail
+- [x] **S4-T8** `VendorMyProductsViewSet` — vendor's own products (all statuses)
+- [x] **S4-T9** `AdminProductModerationView` — approve/reject (AuditLog + vendor Notification)
+- [x] **S4-T10** `VendorProductBulkImportView` — CSV/XLSX → Celery task → `job_id`
+- [x] **S4-T11** `BulkImportStatusView` — poll job status + per-row report
+- [x] **S4-T12** Wire all Sprint 4 URLs
 
-**S4 Status: ⏳ Pending**
+**S4 Status: ✅ Complete** — 26 unit tests passing · Admin Moderation Page & Vendor Products Tab active
 
 ---
 
@@ -164,19 +164,19 @@
 
 ### Tasks
 
-- [ ] **S5-T1** `ProductAttribute`, `ProductAttributeValue` models
-- [ ] **S5-T2** `ProductVariant` (SKU, price, dimensions), `ProductVariantAttribute` models
-- [ ] **S5-T3** `Wishlist` model
-- [ ] **S5-T4** Migrations
-- [ ] **S5-T5** `ProductVariantViewSet` — nested under product, vendor-owner write
-- [ ] **S5-T6** `ProductVariantGenerateView` — cartesian product of attribute-value groups (service call)
-- [ ] **S5-T7** `ProductAttributeViewSet` — public read / admin write
-- [ ] **S5-T8** `ProductSearchView` — full-text + django-filter + facets (Redis cache 60s)
-- [ ] **S5-T9** `ProductRelatedView` — same category, exclude self, order by rating
-- [ ] **S5-T10** `WishlistViewSet` — list/create/destroy, owner-scoped
-- [ ] **S5-T11** Wire all Sprint 5 URLs
+- [x] **S5-T1** `ProductAttribute`, `ProductAttributeValue` models
+- [x] **S5-T2** `ProductVariant` (SKU, price, dimensions), `ProductVariantAttribute` models
+- [x] **S5-T3** `Wishlist` model
+- [x] **S5-T4** Migrations
+- [x] **S5-T5** `ProductVariantViewSet` — nested under product, vendor-owner write
+- [x] **S5-T6** `ProductVariantGenerateView` — cartesian product of attribute-value groups (service call)
+- [x] **S5-T7** `ProductAttributeViewSet` — public read / admin write
+- [x] **S5-T8** `ProductSearchView` — full-text + django-filter + facets (Redis cache 60s)
+- [x] **S5-T9** `ProductRelatedView` — same category, exclude self, order by rating
+- [x] **S5-T10** `WishlistViewSet` — list/create/destroy, owner-scoped
+- [x] **S5-T11** Wire all Sprint 5 URLs
 
-**S5 Status: ⏳ Pending**
+**S5 Status: ✅ Complete** — 15 unit tests passing (88/88 suite-wide) · Cartesian matrix generator & ProductVariantsModal integrated
 
 ---
 
