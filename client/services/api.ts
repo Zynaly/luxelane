@@ -1033,6 +1033,285 @@ export const WishlistAPI = {
   },
 };
 
+// ── Warehouse & Inventory Types (Sprint 6) ────────────────────────────────────
+export interface Warehouse {
+  id: string;
+  vendor?: string | null;
+  name: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  latitude?: string | null;
+  longitude?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface WarehouseStaff {
+  id: string;
+  warehouse: string;
+  user: string;
+  user_name?: string;
+  user_email?: string;
+  staff_role: 'manager' | 'worker';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  warehouse: string;
+  warehouse_name?: string;
+  variant: string;
+  variant_sku?: string;
+  product_title?: string;
+  on_hand: number;
+  reserved_cache: number;
+  available: number;
+  reorder_threshold: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StockMovementItem {
+  id: string;
+  inventory: string;
+  variant_sku?: string;
+  warehouse_name?: string;
+  quantity_delta: number;
+  movement_type: string;
+  reason: string;
+  reference_id?: string | null;
+  performed_by?: string | null;
+  performed_by_name?: string;
+  created_at: string;
+}
+
+export interface VariantWarehouseAvailability {
+  warehouse_id: string;
+  warehouse_name: string;
+  on_hand: number;
+  reserved_cache: number;
+  available: number;
+}
+
+export interface VariantAvailability {
+  variant_id: string;
+  sku: string;
+  product_title: string;
+  total_available: number;
+  total_on_hand: number;
+  warehouses: VariantWarehouseAvailability[];
+}
+
+export interface StockTransferItem {
+  id?: string;
+  variant: string;
+  variant_sku?: string;
+  quantity: number;
+}
+
+export interface StockTransfer {
+  id: string;
+  from_warehouse: string;
+  from_warehouse_name?: string;
+  to_warehouse: string;
+  to_warehouse_name?: string;
+  status: 'draft' | 'pending' | 'in_transit' | 'received' | 'cancelled';
+  requested_by?: string;
+  requested_by_name?: string;
+  approved_by?: string;
+  approved_by_name?: string;
+  notes?: string;
+  items: StockTransferItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PurchaseOrderItem {
+  id?: string;
+  variant: string;
+  variant_sku?: string;
+  qty_ordered: number;
+  qty_received: number;
+  unit_cost: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  warehouse: string;
+  warehouse_name?: string;
+  status: 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+  supplier_name: string;
+  notes?: string;
+  items: PurchaseOrderItem[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Warehouse & Inventory APIs (Sprint 6) ─────────────────────────────────────
+export const WarehouseAPI = {
+  list: async (params?: { is_active?: boolean; vendor?: string; search?: string }): Promise<Warehouse[]> => {
+    const searchParams = new URLSearchParams();
+    if (params?.is_active !== undefined) searchParams.append('is_active', String(params.is_active));
+    if (params?.vendor) searchParams.append('vendor', params.vendor);
+    if (params?.search) searchParams.append('search', params.search);
+    const query = searchParams.toString();
+    const res = await apiRequest<any>(`/warehouses/${query ? `?${query}` : ''}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  get: async (id: string): Promise<Warehouse> => {
+    return apiRequest<Warehouse>(`/warehouses/${id}/`, { method: 'GET' });
+  },
+
+  create: async (data: Partial<Warehouse>): Promise<Warehouse> => {
+    return apiRequest<Warehouse>('/warehouses/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (id: string, data: Partial<Warehouse>): Promise<Warehouse> => {
+    return apiRequest<Warehouse>(`/warehouses/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/warehouses/${id}/`, { method: 'DELETE' });
+  },
+
+  // Staff endpoints
+  listStaff: async (warehouseId: string): Promise<WarehouseStaff[]> => {
+    const res = await apiRequest<any>(`/warehouses/${warehouseId}/staff/`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  addStaff: async (warehouseId: string, data: { user: string; staff_role: 'manager' | 'worker' }): Promise<WarehouseStaff> => {
+    return apiRequest<WarehouseStaff>(`/warehouses/${warehouseId}/staff/`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  removeStaff: async (warehouseId: string, staffId: string): Promise<void> => {
+    return apiRequest<void>(`/warehouses/${warehouseId}/staff/${staffId}/`, { method: 'DELETE' });
+  },
+
+  // Inventory for a facility
+  getInventory: async (warehouseId: string, search?: string): Promise<InventoryItem[]> => {
+    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+    const res = await apiRequest<any>(`/warehouses/${warehouseId}/inventory/${query}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+};
+
+export const InventoryAPI = {
+  adjust: async (data: {
+    warehouse_id: string;
+    variant_id: string;
+    quantity_delta: number;
+    movement_type?: string;
+    reason?: string;
+  }): Promise<{ detail: string; current_on_hand: number; available: number; movement: StockMovementItem }> => {
+    return apiRequest<{ detail: string; current_on_hand: number; available: number; movement: StockMovementItem }>('/inventory/adjust/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  bulkUpdate: async (items: Array<{
+    warehouse_id: string;
+    variant_id: string;
+    quantity_delta: number;
+    reason?: string;
+  }>): Promise<{ detail: string; count: number; movements: StockMovementItem[] }> => {
+    return apiRequest<{ detail: string; count: number; movements: StockMovementItem[] }>('/inventory/bulk-update/', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+    });
+  },
+
+  getLowStock: (): Promise<InventoryItem[]> => {
+    return apiRequest<InventoryItem[]>('/inventory/low-stock/', { method: 'GET' });
+  },
+
+  getAvailability: (variantId: string): Promise<VariantAvailability> => {
+    return apiRequest<VariantAvailability>(`/inventory/availability/${variantId}/`, { method: 'GET' });
+  },
+};
+
+export const StockTransferAPI = {
+  list: async (status?: string): Promise<StockTransfer[]> => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await apiRequest<any>(`/stock-transfers/${query}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  create: async (data: {
+    from_warehouse: string;
+    to_warehouse: string;
+    notes?: string;
+    items: Array<{ variant: string; quantity: number }>;
+  }): Promise<StockTransfer> => {
+    return apiRequest<StockTransfer>('/stock-transfers/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  dispatch: async (id: string): Promise<StockTransfer> => {
+    return apiRequest<StockTransfer>(`/stock-transfers/${id}/dispatch/`, {
+      method: 'POST',
+    });
+  },
+
+  receive: async (id: string): Promise<StockTransfer> => {
+    return apiRequest<StockTransfer>(`/stock-transfers/${id}/receive/`, {
+      method: 'POST',
+    });
+  },
+
+  cancel: async (id: string): Promise<StockTransfer> => {
+    return apiRequest<StockTransfer>(`/stock-transfers/${id}/cancel/`, {
+      method: 'POST',
+    });
+  },
+};
+
+export const PurchaseOrderAPI = {
+  list: async (status?: string): Promise<PurchaseOrder[]> => {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await apiRequest<any>(`/purchase-orders/${query}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  create: async (data: {
+    warehouse: string;
+    supplier_name: string;
+    notes?: string;
+    items: Array<{ variant: string; qty_ordered: number; unit_cost: string }>;
+  }): Promise<PurchaseOrder> => {
+    return apiRequest<PurchaseOrder>('/purchase-orders/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  receive: async (id: string, items?: Array<{ item_id: string; qty_received: number }>): Promise<PurchaseOrder> => {
+    return apiRequest<PurchaseOrder>(`/purchase-orders/${id}/receive/`, {
+      method: 'POST',
+      body: JSON.stringify({ items: items || [] }),
+    });
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1048,5 +1327,10 @@ export default {
   Attribute: AttributeAPI,
   Variant: VariantAPI,
   Wishlist: WishlistAPI,
+  Warehouse: WarehouseAPI,
+  Inventory: InventoryAPI,
+  StockTransfer: StockTransferAPI,
+  PurchaseOrder: PurchaseOrderAPI,
   Token: TokenService,
 };
+

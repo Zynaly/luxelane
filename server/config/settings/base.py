@@ -43,10 +43,11 @@ LOCAL_APPS = [
     "notifications",
     # Sprint 3:
     "vendors",
-    # Sprint 4:
+    # Sprint 4 & 5:
     "catalog",
+    # Sprint 6:
+    "warehouse",
     # Added sprint-by-sprint:
-    # "warehouse",
     # "cart_and_pricing",
     # "orders",
     # "payments",

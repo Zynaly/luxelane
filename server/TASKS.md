@@ -17,7 +17,7 @@
 | 3 | Vendors, KYC, Staff, Commission | 15 | ✅ Complete | ██████████ 100% |
 | 4 | Catalog Core & Moderation | 12 | ✅ Complete | ██████████ 100% |
 | 5 | Variants, Attributes & Search | 9 | ✅ Complete | ██████████ 100% |
-| 6 | Warehouse & Inventory Core | 15 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 6 | Warehouse & Inventory Core | 15 | ✅ Complete | ██████████ 100% |
 | 7 | Reservations, Allocation & Smart Routing | 2 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 8 | Cart, Pricing & Promotions | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 9 | Shipping Rates & Packing | 4 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -186,23 +186,24 @@
 
 ### Tasks
 
-- [ ] **S6-T1** Create `warehouse` app
-- [ ] **S6-T2** `Warehouse`, `WarehouseStaff` models
-- [ ] **S6-T3** `Inventory` model — on_hand, reserved_cache, reorder_threshold
-- [ ] **S6-T4** `StockMovement` (append-only), `StockTransfer`, `StockTransferItem` models
-- [ ] **S6-T5** `PurchaseOrder`, `PurchaseOrderItem` models
-- [ ] **S6-T6** Migrations
-- [ ] **S6-T7** `warehouse.services.stock` — `adjust()`, `consume()`, `restock()` (all writes go through here)
-- [ ] **S6-T8** `WarehouseViewSet` + `WarehouseStaffViewSet`
-- [ ] **S6-T9** `WarehouseInventoryViewSet`, `InventoryAdjustView`, `InventoryBulkUpdateView`
-- [ ] **S6-T10** `StockMovementViewSet` — read-only log, filterable by variant/date
-- [ ] **S6-T11** `StockTransferViewSet` + `approve` / `complete` actions
-- [ ] **S6-T12** `PurchaseOrderViewSet` + `PurchaseOrderReceiveView`
-- [ ] **S6-T13** `LowStockView` + `VariantAvailabilityView` (public)
-- [ ] **S6-T14** `ScopedToWarehouseMixin`
-- [ ] **S6-T15** Wire all Sprint 6 URLs
+- [x] **S6-T1** Create `warehouse` app
+- [x] **S6-T2** `Warehouse`, `WarehouseStaff` models
+- [x] **S6-T3** `Inventory` model — on_hand, reserved_cache, reorder_threshold
+- [x] **S6-T4** `StockMovement` (append-only), `StockTransfer`, `StockTransferItem` models
+- [x] **S6-T5** `PurchaseOrder`, `PurchaseOrderItem` models
+- [x] **S6-T6** Migrations
+- [x] **S6-T7** `warehouse.services.stock` — `adjust()`, `consume()`, `restock()` (all writes go through here)
+- [x] **S6-T8** `WarehouseViewSet` + `WarehouseStaffViewSet`
+- [x] **S6-T9** `WarehouseInventoryViewSet`, `InventoryAdjustView`, `InventoryBulkUpdateView`
+- [x] **S6-T10** `StockMovementViewSet` — read-only log, filterable by variant/date
+- [x] **S6-T11** `StockTransferViewSet` + `approve` / `complete` actions
+- [x] **S6-T12** `PurchaseOrderViewSet` + `PurchaseOrderReceiveView`
+- [x] **S6-T13** `LowStockView` + `VariantAvailabilityView` (public)
+- [x] **S6-T14** `ScopedToWarehouseMixin`
+- [x] **S6-T15** Wire all Sprint 6 URLs
 
-**S6 Status: ⏳ Pending**
+**S6 Status: ✅ Complete**
+
 
 ---
 
