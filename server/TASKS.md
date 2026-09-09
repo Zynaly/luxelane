@@ -19,7 +19,7 @@
 | 5 | Variants, Attributes & Search | 9 | ✅ Complete | ██████████ 100% |
 | 6 | Warehouse & Inventory Core | 15 | ✅ Complete | ██████████ 100% |
 | 7 | Reservations, Allocation & Smart Routing | 2 | ✅ Complete | ██████████ 100% |
-| 8 | Cart, Pricing & Promotions | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
+| 8 | Cart, Pricing & Promotions | 12 | ✅ Complete | ██████████ 100% |
 
 | 9 | Shipping Rates & Packing | 4 | ⏳ Pending | ░░░░░░░░░░ 0% |
 | 10 | Orders & Checkout Orchestration | 12 | ⏳ Pending | ░░░░░░░░░░ 0% |
@@ -234,22 +234,22 @@
 
 ### Tasks
 
-- [ ] **S8-T1** Create `cart_and_pricing` app
-- [ ] **S8-T2** `Cart` (guest session_key + user FK), `CartItem` (price_snapshot) models
-- [ ] **S8-T3** `Coupon`, `CouponUsage` models — scoped, usage limits
-- [ ] **S8-T4** `TaxRate`, `TaxRule` models
-- [ ] **S8-T5** Migrations
-- [ ] **S8-T6** `pricing.calculate()` service — subtotal, coupon discount, tax, shipping total
-- [ ] **S8-T7** `CartView` — get-or-create by session/user
-- [ ] **S8-T8** `CartItemViewSet` — create/update/destroy, cart-owner check
-- [ ] **S8-T9** `CartMergeView` — merge guest → auth cart post-login
-- [ ] **S8-T10** `CartApplyCouponView` + `CartRemoveCouponView`
-- [ ] **S8-T11** `CartSummaryView` + `CartValidateView` (price_snapshot staleness + stock)
-- [ ] **S8-T12** `CouponViewSet` (public active) + `CouponValidateView` + `AdminCouponViewSet`
-- [ ] **S8-T13** `TaxQuoteView`
-- [ ] **S8-T14** Wire all Sprint 8 URLs
+- [x] **S8-T1** Create `cart_and_pricing` app
+- [x] **S8-T2** `Cart` (guest session_key + user FK), `CartItem` (price_snapshot) models
+- [x] **S8-T3** `Coupon`, `CouponUsage` models — scoped, usage limits
+- [x] **S8-T4** `TaxRate`, `TaxRule` models
+- [x] **S8-T5** Migrations
+- [x] **S8-T6** `pricing.calculate()` service — subtotal, coupon discount, tax, shipping total
+- [x] **S8-T7** `CartView` — get-or-create by session/user
+- [x] **S8-T8** `CartItemViewSet` — create/update/destroy, cart-owner check
+- [x] **S8-T9** `CartMergeView` — merge guest → auth cart post-login
+- [x] **S8-T10** `CartApplyCouponView` + `CartRemoveCouponView`
+- [x] **S8-T11** `CartSummaryView` + `CartValidateView` (price_snapshot staleness + stock)
+- [x] **S8-T12** `CouponViewSet` (public active) + `CouponValidateView` + `AdminCouponViewSet`
+- [x] **S8-T13** `TaxQuoteView`
+- [x] **S8-T14** Wire all Sprint 8 URLs
 
-**S8 Status: ⏳ Pending**
+**S8 Status: ✅ Complete** — 19/19 unit tests passing · Frontend CartPage & API integrated
 
 ---
 

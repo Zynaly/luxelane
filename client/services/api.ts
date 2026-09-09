@@ -21,7 +21,15 @@ export const TokenService = {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_data');
   },
-  getAuthHeader: (): HeadersInit => {
+  getSessionKey: (): string => {
+    let key = localStorage.getItem('guest_session_key');
+    if (!key) {
+      key = 'guest_' + Math.random().toString(36).substring(2, 12) + '_' + Date.now().toString(36);
+      localStorage.setItem('guest_session_key', key);
+    }
+    return key;
+  },
+  getAuthHeader: (): Record<string, string> => {
     const token = TokenService.getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   },
@@ -31,8 +39,9 @@ export const TokenService = {
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  const defaultHeaders: HeadersInit = {
+  const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
+    'X-Session-Key': TokenService.getSessionKey(),
     ...TokenService.getAuthHeader(),
   };
 
@@ -40,7 +49,7 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     ...options,
     headers: {
       ...defaultHeaders,
-      ...options.headers,
+      ...(options.headers as Record<string, string> || {}),
     },
   };
 
@@ -1385,6 +1394,181 @@ export const ReservationAPI = {
   },
 };
 
+// ── Sprint 8: Cart, Pricing & Promotions Interfaces & APIs ───────────────────
+export interface CartItem {
+  id: string;
+  variant: string;
+  variant_sku: string;
+  product_title: string;
+  product_id: string;
+  quantity: number;
+  price_snapshot: string;
+  current_price: string;
+  line_subtotal: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PriceBreakdown {
+  subtotal: string;
+  discount_total: string;
+  tax_total: string;
+  tax_rate_pct: string;
+  shipping_total: string;
+  grand_total: string;
+  currency: string;
+  applied_coupon_code: string | null;
+  item_count: number;
+}
+
+export interface Cart {
+  id: string;
+  user: string | null;
+  session_key: string | null;
+  status: 'active' | 'abandoned' | 'converted';
+  applied_coupon: string | null;
+  applied_coupon_code: string | null;
+  items: CartItem[];
+  price_breakdown: PriceBreakdown;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discount_type: 'PERCENTAGE' | 'FIXED';
+  discount_value: string;
+  scope: 'GLOBAL' | 'PRODUCT' | 'CATEGORY' | 'VENDOR';
+  scope_target_id?: string | null;
+  min_cart_value: string;
+  usage_limit_total?: number | null;
+  usage_limit_per_user?: number;
+  usage_count?: number;
+  valid_from: string;
+  valid_to: string;
+  is_active: boolean;
+}
+
+export interface CartValidationIssue {
+  item_id: string;
+  sku: string;
+  product_title: string;
+  code: 'PRICE_CHANGED' | 'OUT_OF_STOCK' | 'INSUFFICIENT_STOCK' | 'VARIANT_UNAVAILABLE' | string;
+  message: string;
+  old_price?: string;
+  new_price?: string;
+  requested?: number;
+  available?: number;
+}
+
+export interface CartValidationResult {
+  is_valid: boolean;
+  issues: CartValidationIssue[];
+}
+
+export interface TaxQuote {
+  country: string;
+  state: string;
+  rate_pct: string;
+  tax_amount: string;
+}
+
+export const CartAPI = {
+  get: async (): Promise<Cart> => {
+    return apiRequest<Cart>('/cart/');
+  },
+  addItem: async (data: { variant_id: string; quantity?: number }): Promise<CartItem> => {
+    return apiRequest<CartItem>('/cart/items/', {
+      method: 'POST',
+      body: JSON.stringify({
+        variant_id: data.variant_id,
+        quantity: data.quantity ?? 1,
+      }),
+    });
+  },
+  updateItem: async (itemId: string, quantity: number): Promise<CartItem> => {
+    return apiRequest<CartItem>(`/cart/items/${itemId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity }),
+    });
+  },
+  removeItem: async (itemId: string): Promise<void> => {
+    return apiRequest<void>(`/cart/items/${itemId}/`, {
+      method: 'DELETE',
+    });
+  },
+  applyCoupon: async (code: string): Promise<Cart> => {
+    return apiRequest<Cart>('/cart/apply-coupon/', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  },
+  removeCoupon: async (): Promise<Cart> => {
+    return apiRequest<Cart>('/cart/remove-coupon/', {
+      method: 'POST',
+    });
+  },
+  getSummary: async (): Promise<PriceBreakdown> => {
+    return apiRequest<PriceBreakdown>('/cart/summary/');
+  },
+  validate: async (): Promise<CartValidationResult> => {
+    return apiRequest<CartValidationResult>('/cart/validate/', {
+      method: 'POST',
+    });
+  },
+  merge: async (guestSessionKey?: string): Promise<Cart> => {
+    const key = guestSessionKey || TokenService.getSessionKey();
+    return apiRequest<Cart>('/cart/merge/', {
+      method: 'POST',
+      body: JSON.stringify({ guest_session_key: key }),
+    });
+  },
+};
+
+export const CouponAPI = {
+  list: async (): Promise<Coupon[]> => {
+    const res = await apiRequest<any>('/coupons/');
+    return res.results || res || [];
+  },
+  validate: async (code: string, subtotal: number = 0): Promise<{ is_valid: boolean; discount_amount: string; message: string }> => {
+    return apiRequest<{ is_valid: boolean; discount_amount: string; message: string }>('/coupons/validate/', {
+      method: 'POST',
+      body: JSON.stringify({ code, subtotal }),
+    });
+  },
+  adminList: async (): Promise<Coupon[]> => {
+    const res = await apiRequest<any>('/admin/coupons/');
+    return res.results || res || [];
+  },
+  adminCreate: async (data: Partial<Coupon>): Promise<Coupon> => {
+    return apiRequest<Coupon>('/admin/coupons/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  adminUpdate: async (id: string, data: Partial<Coupon>): Promise<Coupon> => {
+    return apiRequest<Coupon>(`/admin/coupons/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  adminDelete: async (id: string): Promise<void> => {
+    return apiRequest<void>(`/admin/coupons/${id}/`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+export const TaxAPI = {
+  quote: async (data: { country?: string; state?: string; subtotal: number; address_id?: string }): Promise<TaxQuote> => {
+    return apiRequest<TaxQuote>('/tax/quote/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1406,7 +1590,11 @@ export default {
   PurchaseOrder: PurchaseOrderAPI,
   Allocation: AllocationAPI,
   Reservation: ReservationAPI,
+  Cart: CartAPI,
+  Coupon: CouponAPI,
+  Tax: TaxAPI,
   Token: TokenService,
 };
+
 
 

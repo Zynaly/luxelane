@@ -18,9 +18,15 @@ from warehouse.urls import (
     purchase_order_urlpatterns,
     warehouse_admin_urls,
 )
+from cart_and_pricing.urls import (
+    cart_urlpatterns,
+    coupon_urlpatterns,
+    tax_urlpatterns,
+    cart_admin_urls,
+)
 
 # Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
-combined_admin_urls = vendor_admin_urls + catalog_admin_urls + warehouse_admin_urls
+combined_admin_urls = vendor_admin_urls + catalog_admin_urls + warehouse_admin_urls + cart_admin_urls
 
 
 urlpatterns = [
@@ -45,13 +51,19 @@ urlpatterns = [
     path("products/", include((product_urlpatterns, "products"))),
     path("wishlist/", include((wishlist_urlpatterns, "wishlist"))),
 
-    # Sprint 6 — Warehouse & Inventory Core
+    # Sprint 6 & 7 — Warehouse & Inventory Core
     path("warehouses/", include((warehouse_urlpatterns, "warehouses"))),
     path("inventory/", include((inventory_urlpatterns, "inventory"))),
     path("stock-movements/", include((stock_movement_urlpatterns, "stock-movements"))),
     path("stock-transfers/", include((stock_transfer_urlpatterns, "stock-transfers"))),
     path("purchase-orders/", include((purchase_order_urlpatterns, "purchase-orders"))),
 
+    # Sprint 8 — Cart, Pricing & Promotions
+    path("cart/", include((cart_urlpatterns, "cart"))),
+    path("coupons/", include((coupon_urlpatterns, "coupons"))),
+    path("checkout/", include((tax_urlpatterns, "checkout"))),
+
     # All admin sub-patterns merged under a single admin/ prefix
     path("admin/", include((combined_admin_urls, "admin-api"))),
 ]
+

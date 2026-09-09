@@ -47,12 +47,14 @@ LOCAL_APPS = [
     "catalog",
     # Sprint 6:
     "warehouse",
+    # Sprint 8:
+    "cart_and_pricing",
     # Added sprint-by-sprint:
-    # "cart_and_pricing",
     # "orders",
     # "payments",
     # "shipping",
 ]
+
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 

@@ -17,20 +17,17 @@ import VendorManagementPage from './views/admin/pages/VendorManagementPage';
 import CommissionManagementPage from './views/admin/pages/CommissionManagementPage';
 import VendorDashboard from './views/vendor/VendorDashboard';
 import VendorStorefrontPage from './views/customer/pages/VendorStorefrontPage';
+import CartPage from './views/customer/pages/CartPage';
 
 import { User } from './types';
 import { mockUser, mockAdminUser } from './data/mockData';
 import API, { TokenService } from './services/api';
 
-// Placeholder Customer Pages for routes not fully built out
-const CartPagePlaceholder: React.FC = () => <div className="p-8 text-center text-2xl font-serif">Shopping Cart Page</div>;
-
 type CustomerPage = 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account';
 type AdminPage = 'dashboard' | 'products' | 'orders' | 'customers' | 'vendors' | 'commissions' | 'warehouse';
 
-const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () => void }> = ({ onNavigate, onLogout }) => {
+const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () => void; cartItemCount?: number }> = ({ onNavigate, onLogout, cartItemCount = 0 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const cartItemCount = 3; // Mocked value
 
   return (
     <header className="bg-white sticky top-0 z-40 shadow-sm">
@@ -230,6 +227,13 @@ const ChatbotWidget: React.FC<{isOpen: boolean, onToggle: () => void}> = ({isOpe
 const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [page, setPage] = useState<CustomerPage>('home');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  useEffect(() => {
+    API.Cart.getSummary()
+      .then((summary) => setCartCount(summary.item_count || 0))
+      .catch(() => {});
+  }, []);
 
   const renderPage = () => {
     switch (page) {
@@ -237,7 +241,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       case 'shop': return <ShopPage />;
       case 'about': return <AboutUsPage />;
       case 'contact': return <ContactPage onOpenChat={() => setIsChatOpen(true)} />;
-      case 'cart': return <CartPagePlaceholder />;
+      case 'cart': return <CartPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'account': return <AccountPage onLogout={onLogout} />;
       default: return <HomePage onNavigate={setPage} />;
     }
@@ -245,7 +249,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      <Header onNavigate={setPage} onLogout={onLogout} />
+      <Header onNavigate={setPage} onLogout={onLogout} cartItemCount={cartCount} />
       <main className="flex-grow">{renderPage()}</main>
       <Footer onNavigate={setPage} />
       <ChatbotWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(prev => !prev)}/>
