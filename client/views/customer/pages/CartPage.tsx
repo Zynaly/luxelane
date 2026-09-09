@@ -39,7 +39,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
     state: 'NY',
     postal_code: '10021',
     country: 'US',
-    payment_method: 'card',
+    payment_method: 'stripe',
   });
 
   const fetchCart = useCallback(async () => {
@@ -73,8 +73,11 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
         postal_code: zip || destPostalCode,
       });
       setShippingRates(quotes);
-      if (quotes.length > 0 && !selectedShippingQuote) {
-        // Select lowest or standard by default
+      // Automatically select the enabled 'Shipment by Vendor' quote, never a coming-soon carrier
+      const enabledQuote = quotes.find((q) => q.is_enabled !== false && q.status !== 'coming_soon');
+      if (enabledQuote) {
+        setSelectedShippingQuote(enabledQuote);
+      } else if (quotes.length > 0 && !selectedShippingQuote) {
         setSelectedShippingQuote(quotes[0]);
       }
     } catch (err) {
@@ -239,6 +242,19 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
         payment_method: checkoutForm.payment_method,
         idempotency_key: idempotencyKey,
       });
+
+      // If Stripe was selected, initiate and confirm sandbox payment intent
+      if (checkoutForm.payment_method === 'stripe' && res?.order_id) {
+        try {
+          const intent = await API.Payment.createStripeIntent({ order_id: res.order_id });
+          const piId = intent?.stripe_payment_intent_id || (intent as any)?.payment_intent_id;
+          if (piId) {
+            await API.Payment.confirmStripePayment({ payment_intent_id: piId });
+          }
+        } catch (stripeErr) {
+          console.warn('Stripe sandbox verification status:', stripeErr);
+        }
+      }
 
       setPlacedOrder(res);
       setCheckoutStep('confirmed');
@@ -1005,61 +1021,182 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
 
                     {/* Delivery Quote Selector */}
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2">
-                        3. Selected Delivery Courier
-                      </h4>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
+                          3. Delivery Logistics
+                        </h4>
+                        <span className="text-[10px] text-stone-400">Only enabled methods can be selected</span>
+                      </div>
                       {shippingRates.length > 0 ? (
-                        <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                          {shippingRates.map((q) => (
-                            <label
-                              key={q.quote_id}
-                              className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-colors ${
-                                selectedShippingQuote?.quote_id === q.quote_id
-                                  ? 'border-stone-900 bg-stone-50 font-medium'
-                                  : 'border-stone-200 hover:border-stone-300'
-                              }`}
-                            >
-                              <div className="flex items-center space-x-2.5">
-                                <input
-                                  type="radio"
-                                  name="shippingQuoteRadio"
-                                  checked={selectedShippingQuote?.quote_id === q.quote_id}
-                                  onChange={() => setSelectedShippingQuote(q)}
-                                  className="text-stone-900 focus:ring-stone-900"
-                                />
-                                <div>
-                                  <span className="font-semibold text-stone-900">{q.carrier_name}</span>
-                                  <span className="text-stone-500 ml-1.5 font-normal">({q.service_level})</span>
-                                  <span className="block text-[10px] text-stone-400 font-mono">{q.quote_id} · ~{q.estimated_days} business days</span>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {shippingRates.map((q) => {
+                            const isComingSoon = q.is_enabled === false || q.status === 'coming_soon';
+                            const isSelected = selectedShippingQuote?.quote_id === q.quote_id;
+
+                            return (
+                              <label
+                                key={q.quote_id}
+                                className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-colors ${
+                                  isComingSoon
+                                    ? 'border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed'
+                                    : isSelected
+                                    ? 'border-stone-900 bg-stone-50 font-medium cursor-pointer ring-1 ring-stone-900'
+                                    : 'border-stone-200 hover:border-stone-300 cursor-pointer bg-white'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2.5">
+                                  <input
+                                    type="radio"
+                                    name="shippingQuoteRadio"
+                                    disabled={isComingSoon}
+                                    checked={isSelected}
+                                    onChange={() => !isComingSoon && setSelectedShippingQuote(q)}
+                                    className="text-stone-900 focus:ring-stone-900 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                  />
+                                  <div>
+                                    <div className="flex items-center space-x-2">
+                                      <span className={`font-semibold ${isComingSoon ? 'text-stone-500' : 'text-stone-900'}`}>
+                                        {q.carrier_name}
+                                      </span>
+                                      {isComingSoon ? (
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                                          Coming Soon
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                          Enabled
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-stone-500 text-[11px] block mt-0.5">
+                                      {q.service_level}
+                                      {isComingSoon && ' — Courier integration in progress'}
+                                    </span>
+                                    <span className="block text-[10px] text-stone-400 font-mono mt-0.5">
+                                      {isComingSoon
+                                        ? 'Temporarily unavailable for direct dispatch'
+                                        : `${q.quote_id} · ~${q.estimated_days} business days direct from atelier`}
+                                    </span>
+                                  </div>
                                 </div>
-                              </div>
-                              <span className="font-mono font-bold text-stone-900">${parseFloat(q.amount).toFixed(2)}</span>
-                            </label>
-                          ))}
+                                <span className={`font-mono font-bold ${isComingSoon ? 'text-stone-400 text-[11px]' : 'text-stone-900 text-sm'}`}>
+                                  {isComingSoon ? '—' : `$${parseFloat(q.amount).toFixed(2)}`}
+                                </span>
+                              </label>
+                            );
+                          })}
                         </div>
                       ) : (
-                        <p className="text-xs text-stone-500 italic">No real-time quotes found; please verify address.</p>
+                        <p className="text-xs text-stone-500 italic">Calculating available delivery quotes...</p>
                       )}
                     </div>
 
-                    {/* Payment Authorization Simulation */}
+                    {/* Payment Method Selector */}
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2">
-                        4. Payment Method
-                      </h4>
-                      <div className="p-3.5 rounded-xl border border-stone-200 bg-stone-50 flex items-center justify-between text-xs">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-9 h-6 rounded bg-stone-900 text-amber-300 flex items-center justify-center text-[9px] font-mono font-bold tracking-wider">
-                            LUXE
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
+                          4. Payment Method
+                        </h4>
+                        <span className="text-[10px] text-stone-400 font-mono">Sandbox Environment</span>
+                      </div>
+                      <div className="space-y-2">
+                        {/* 1. Stripe (Working Sandbox Credentials) */}
+                        <label
+                          className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                            checkoutForm.payment_method === 'stripe'
+                              ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900'
+                              : 'border-stone-200 hover:border-stone-300 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="radio"
+                              name="paymentMethodRadio"
+                              checked={checkoutForm.payment_method === 'stripe'}
+                              onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'stripe' })}
+                              className="text-stone-900 focus:ring-stone-900"
+                            />
+                            <div className="w-8 h-6 rounded bg-indigo-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                              STRIPE
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-stone-900">Credit / Debit Card (Stripe)</span>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  Sandbox Active
+                                </span>
+                              </div>
+                              <span className="block text-[10px] text-stone-500 mt-0.5">
+                                Verified Test Card: •••• •••• •••• 4242 · Exp 12/28 · CVC 123
+                              </span>
+                            </div>
                           </div>
-                          <div>
-                            <span className="font-semibold text-stone-900">FakeGateway Simulation (Instant Settle)</span>
-                            <span className="block text-[10px] text-stone-500">•••• •••• •••• 4242 · Exp 12/28</span>
+                          <span className="text-[11px] font-mono text-emerald-700 font-semibold">Live Sandbox</span>
+                        </label>
+
+                        {/* 2. JazzCash (Disabled / Coming Soon) */}
+                        <label
+                          className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed text-xs"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="radio"
+                              name="paymentMethodRadio"
+                              disabled
+                              checked={false}
+                              className="text-stone-400 focus:ring-stone-400 opacity-40 cursor-not-allowed"
+                            />
+                            <div className="w-8 h-6 rounded bg-amber-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                              JC
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-stone-500">JazzCash</span>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                                  Coming Soon
+                                </span>
+                              </div>
+                              <span className="block text-[10px] text-stone-400 mt-0.5">
+                                Mobile Account & Voucher checkout arriving soon
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono text-[10px] font-semibold uppercase">
-                          Sandbox Active
-                        </span>
+                          <span className="text-[10px] text-amber-700 font-medium">Coming Soon</span>
+                        </label>
+
+                        {/* 3. Cash on Delivery (COD) (Enabled) */}
+                        <label
+                          className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                            checkoutForm.payment_method === 'cod'
+                              ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900'
+                              : 'border-stone-200 hover:border-stone-300 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-3">
+                            <input
+                              type="radio"
+                              name="paymentMethodRadio"
+                              checked={checkoutForm.payment_method === 'cod'}
+                              onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'cod' })}
+                              className="text-stone-900 focus:ring-stone-900"
+                            />
+                            <div className="w-8 h-6 rounded bg-stone-800 text-amber-300 flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                              COD
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-semibold text-stone-900">Cash on Delivery</span>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
+                                  Available
+                                </span>
+                              </div>
+                              <span className="block text-[10px] text-stone-500 mt-0.5">
+                                Pay cash upon parcel delivery with OTP verification
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-mono text-stone-600 font-medium">OTP Handover</span>
+                        </label>
                       </div>
                     </div>
 

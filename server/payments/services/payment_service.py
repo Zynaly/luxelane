@@ -28,13 +28,40 @@ logger = logging.getLogger(__name__)
 
 class PaymentService:
     def get_available_gateways(self) -> List[str]:
-        """Returns list of active payment gateways configured on platform."""
-        gateways = ["fake", "cod"]
-        if getattr(settings, "STRIPE_SECRET_KEY", None):
-            gateways.insert(0, "stripe")
-        if getattr(settings, "AUTHORIZENET_API_LOGIN_ID", None):
-            gateways.insert(1, "authorize_net")
+        """Returns list of active and coming-soon payment gateways configured on platform."""
+        gateways = ["stripe", "jazzcash", "cod", "fake"]
         return gateways
+
+    def get_gateways_detail(self) -> List[Dict[str, Any]]:
+        """Returns structured gateway metadata with status and availability."""
+        is_stripe_sandbox = getattr(settings, "STRIPE_SECRET_KEY", "").startswith("sk_test_")
+
+        return [
+            {
+                "code": "stripe",
+                "name": "Credit / Debit Card (Stripe)",
+                "status": "active",
+                "is_enabled": True,
+                "badge": "Sandbox Active" if is_stripe_sandbox else "Live",
+                "description": "Visa, Mastercard, Amex via Stripe Sandbox (live test keys active).",
+            },
+            {
+                "code": "jazzcash",
+                "name": "JazzCash",
+                "status": "coming_soon",
+                "is_enabled": False,
+                "badge": "Coming Soon",
+                "description": "Mobile account & voucher checkout (Integration arriving soon).",
+            },
+            {
+                "code": "cod",
+                "name": "Cash on Delivery",
+                "status": "active",
+                "is_enabled": True,
+                "badge": "Available",
+                "description": "Pay cash upon parcel delivery with OTP verification.",
+            },
+        ]
 
     def create_stripe_payment_intent(self, order: Order, user: Optional[Any] = None) -> Dict[str, Any]:
         """

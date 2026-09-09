@@ -8,10 +8,22 @@ from django.utils import timezone
 from core.models import BaseModel
 
 
+class CarrierStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    COMING_SOON = "coming_soon", "Coming Soon"
+    DISABLED = "disabled", "Disabled"
+
+
 class Carrier(BaseModel):
-    """Supported logistics carrier / fulfillment provider (e.g. DHL, UPS, USPS, FedEx, Fake, White-Glove)."""
-    code = models.CharField(max_length=50, unique=True, help_text="Unique identifier e.g. dhl, ups, usps, fedex, fake, vendor_self")
+    """Supported logistics carrier / fulfillment provider (e.g. DHL, UPS, USPS, FedEx, TCS, Vendor Self)."""
+    code = models.CharField(max_length=50, unique=True, help_text="Unique identifier e.g. fedex, tcs, vendor_delivery, fake")
     name = models.CharField(max_length=100)
+    status = models.CharField(
+        max_length=20,
+        choices=CarrierStatus.choices,
+        default=CarrierStatus.ACTIVE,
+        help_text="Operational status (active, coming_soon, disabled)"
+    )
     is_active = models.BooleanField(default=True)
     tracking_url_template = models.CharField(
         max_length=255,
@@ -19,6 +31,10 @@ class Carrier(BaseModel):
         default="",
         help_text="URL template with {tracking_number} placeholder"
     )
+
+    @property
+    def is_enabled(self) -> bool:
+        return self.is_active and self.status == CarrierStatus.ACTIVE
 
     class Meta:
         verbose_name = "Carrier"

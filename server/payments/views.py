@@ -41,13 +41,16 @@ class PaymentMethodsView(APIView):
     """
     GET /payments/methods/ — Returns user's saved cards and active payment gateways.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request):
-        saved_cards = SavedCard.objects.filter(user=request.user)
+        user = request.user if (request.user and request.user.is_authenticated) else None
+        saved_cards = SavedCard.objects.filter(user=user) if user else []
         available_gateways = payment_service.get_available_gateways()
+        gateways_detail = payment_service.get_gateways_detail()
         data = {
             "available_gateways": available_gateways,
+            "gateways": gateways_detail,
             "saved_cards": SavedCardSerializer(saved_cards, many=True).data,
         }
         return Response(data)

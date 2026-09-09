@@ -1938,6 +1938,8 @@ export interface RateQuote {
   cart_or_order_ref: string;
   carrier_code: string;
   carrier_name: string;
+  status?: string;
+  is_enabled?: boolean;
   service_level: string;
   amount: string;
   currency: string;
@@ -2460,8 +2462,19 @@ export interface PaymentTransaction {
   created_at: string;
 }
 
+export interface PaymentGatewayDetail {
+  code: string;
+  name: string;
+  status: 'active' | 'coming_soon' | 'disabled';
+  is_enabled: boolean;
+  badge: string;
+  description: string;
+}
+
 export interface PaymentMethodsResponse {
-  gateways: string[];
+  available_gateways?: string[];
+  gateways: PaymentGatewayDetail[] | any[];
+  saved_cards?: SavedCard[];
   stripe?: {
     publishable_key: string;
   };

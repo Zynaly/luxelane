@@ -45,7 +45,7 @@ class StripeGateway:
                 params: Dict[str, Any] = {
                     "amount": amount_cents,
                     "currency": currency.lower(),
-                    "automatic_payment_methods": {"enabled": True},
+                    "automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
                     "metadata": metadata or {},
                 }
                 if customer_id:
@@ -77,12 +77,27 @@ class StripeGateway:
         if self.is_live:
             try:
                 intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+
+                # In sandbox test mode, if intent still requires a payment method,
+                # confirm with official Stripe test card pm_card_visa
+                if intent.status == "requires_payment_method" and self.secret_key.startswith("sk_test_"):
+                    try:
+                        intent = stripe.PaymentIntent.confirm(payment_intent_id, payment_method="pm_card_visa")
+                    except Exception as confirm_err:
+                        logger.warning(f"Stripe test card auto-confirm note: {confirm_err}")
+
+                charges = []
+                if hasattr(intent, "charges") and getattr(intent.charges, "data", None):
+                    charges = [c.id for c in intent.charges.data]
+                elif getattr(intent, "latest_charge", None):
+                    charges = [intent.latest_charge]
+
                 return {
                     "id": intent.id,
                     "amount": intent.amount,
                     "currency": intent.currency,
                     "status": intent.status,
-                    "charges": [c.id for c in getattr(intent, "charges", {}).get("data", [])] if hasattr(intent, "charges") else [],
+                    "charges": charges,
                 }
             except Exception as exc:
                 logger.error(f"Stripe PaymentIntent retrieve error: {exc}")

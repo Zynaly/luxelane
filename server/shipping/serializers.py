@@ -9,9 +9,11 @@ from cart_and_pricing.models import Cart
 
 
 class CarrierSerializer(serializers.ModelSerializer):
+    is_enabled = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Carrier
-        fields = ["id", "code", "name", "is_active", "tracking_url_template", "created_at"]
+        fields = ["id", "code", "name", "status", "is_enabled", "is_active", "tracking_url_template", "created_at"]
         read_only_fields = fields
 
 
@@ -62,13 +64,15 @@ class ShippingRateCardSerializer(serializers.ModelSerializer):
 class RateQuoteResponseSerializer(serializers.ModelSerializer):
     carrier_code = serializers.CharField(source="carrier.code", read_only=True)
     carrier_name = serializers.CharField(source="carrier.name", read_only=True)
+    status = serializers.CharField(source="carrier.status", default="active", read_only=True)
+    is_enabled = serializers.BooleanField(source="carrier.is_enabled", default=True, read_only=True)
 
     class Meta:
         model = RateQuote
         fields = [
             "id", "cart_or_order_ref", "carrier_code", "carrier_name",
-            "service_level", "amount", "currency", "quote_id",
-            "estimated_days", "expires_at", "redeemed", "metadata",
+            "status", "is_enabled", "service_level", "amount", "currency",
+            "quote_id", "estimated_days", "expires_at", "redeemed", "metadata",
         ]
         read_only_fields = fields
 

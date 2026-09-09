@@ -109,6 +109,9 @@ def place_order(
     if rate_quote.redeemed:
         raise ValidationError({"rate_quote_id": "The selected shipping rate quote has already been redeemed."})
 
+    if getattr(rate_quote.carrier, "status", None) == "coming_soon" or rate_quote.metadata.get("status") == "coming_soon":
+        raise ValidationError({"rate_quote_id": "The selected shipping carrier is coming soon. Only 'Shipment by Vendor' is currently enabled."})
+
     # 4. Server-side Financials Calculation (Never trust client prices)
     auth_user = user if (user and user.is_authenticated) else None
     breakdown = pricing_service.calculate(cart, user=auth_user)

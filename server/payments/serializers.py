@@ -35,6 +35,7 @@ class SaveCardCreateSerializer(serializers.Serializer):
 
 class PaymentMethodsResponseSerializer(serializers.Serializer):
     available_gateways = serializers.ListField(child=serializers.CharField())
+    gateways = serializers.ListField(child=serializers.DictField(), required=False)
     saved_cards = SavedCardSerializer(many=True)
 
 

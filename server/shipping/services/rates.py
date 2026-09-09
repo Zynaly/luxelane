@@ -177,7 +177,75 @@ def get_quotes(
             },
         })
 
-    # Default emergency fallback if both carrier & rate cards are empty
+    # 4. Shipment by Vendor (Active & Enabled) + FedEx/TCS (Coming Soon)
+    vendor_carrier = Carrier.objects.filter(code="vendor_delivery").first()
+    if not vendor_carrier:
+        vendor_carrier = default_carrier
+
+    # Always provide active 'Shipment by Vendor' quote
+    if vendor_carrier:
+        # Check if rate card or calculated cost is available
+        vendor_amount = Decimal("15.00")
+        if rate_cards.exists():
+            vendor_amount = rate_cards.first().calculate_cost(weight_kg)
+
+        quote_candidates.insert(0, {
+            "carrier": vendor_carrier,
+            "carrier_code": "vendor_delivery",
+            "carrier_name": "Shipment by Vendor",
+            "service_level": "Standard Delivery (Vendor Direct)",
+            "amount": vendor_amount,
+            "currency": "USD",
+            "estimated_days": 3,
+            "quote_id": RateQuote.generate_quote_id("vendor_delivery"),
+            "metadata": {
+                "status": "active",
+                "is_enabled": True,
+                "description": "Fulfillment and shipping directly by the vendor atelier",
+            },
+        })
+
+    # Option for FedEx (Coming Soon)
+    fedex_carrier = Carrier.objects.filter(code="fedex").first()
+    if fedex_carrier:
+        quote_candidates.append({
+            "carrier": fedex_carrier,
+            "carrier_code": "fedex",
+            "carrier_name": "FedEx",
+            "service_level": "Priority Courier",
+            "amount": Decimal("0.00"),
+            "currency": "USD",
+            "estimated_days": 2,
+            "quote_id": RateQuote.generate_quote_id("fedex"),
+            "metadata": {
+                "status": "coming_soon",
+                "is_enabled": False,
+                "badge": "Coming Soon",
+                "description": "FedEx global courier integration arriving soon.",
+            },
+        })
+
+    # Option for TCS (Coming Soon)
+    tcs_carrier = Carrier.objects.filter(code="tcs").first()
+    if tcs_carrier:
+        quote_candidates.append({
+            "carrier": tcs_carrier,
+            "carrier_code": "tcs",
+            "carrier_name": "TCS Express",
+            "service_level": "Express Courier",
+            "amount": Decimal("0.00"),
+            "currency": "USD",
+            "estimated_days": 3,
+            "quote_id": RateQuote.generate_quote_id("tcs"),
+            "metadata": {
+                "status": "coming_soon",
+                "is_enabled": False,
+                "badge": "Coming Soon",
+                "description": "TCS domestic courier integration arriving soon.",
+            },
+        })
+
+    # Fallback if candidates are still empty
     if not quote_candidates:
         quote_candidates.append({
             "carrier": default_carrier,
