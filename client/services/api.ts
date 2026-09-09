@@ -1871,6 +1871,131 @@ export const OrderAPI = {
   },
 };
 
+// ── Payment Interfaces & API (Sprint 11) ────────────────────────────────────
+
+export interface SavedCard {
+  id: string;
+  gateway: 'stripe' | 'authorize_net';
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+  is_default: boolean;
+  nickname?: string;
+  created_at: string;
+}
+
+export interface PaymentAttempt {
+  id: string;
+  order: string;
+  gateway: string;
+  amount: string;
+  currency: string;
+  status: 'initiated' | 'requires_action' | 'authorized' | 'captured' | 'failed' | 'cancelled';
+  gateway_ref: string;
+  error_message?: string;
+  created_at: string;
+}
+
+export interface PaymentTransaction {
+  id: string;
+  payment_attempt: string;
+  transaction_type: 'authorization' | 'capture' | 'sale' | 'refund' | 'void';
+  amount: string;
+  currency: string;
+  status: 'pending' | 'success' | 'failed';
+  gateway_transaction_id: string;
+  raw_response?: Record<string, any>;
+  created_at: string;
+}
+
+export interface PaymentMethodsResponse {
+  gateways: string[];
+  stripe?: {
+    publishable_key: string;
+  };
+  authorize_net?: {
+    api_login_id: string;
+    client_key: string;
+    environment: string;
+  };
+}
+
+export interface StripeIntentResponse {
+  payment_attempt_id: string;
+  client_secret: string;
+  stripe_payment_intent_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
+export interface AuthorizeNetChargeRequest {
+  order_id: string;
+  opaque_data_descriptor: string;
+  opaque_data_value: string;
+  save_card?: boolean;
+}
+
+export const PaymentAPI = {
+  getMethods: async (): Promise<PaymentMethodsResponse> => {
+    return apiRequest<PaymentMethodsResponse>('/payments/methods/', { method: 'GET' });
+  },
+
+  listCards: async (): Promise<{ count: number; results: SavedCard[] }> => {
+    const res = await apiRequest<any>('/payments/cards/', { method: 'GET' });
+    if (Array.isArray(res)) {
+      return { count: res.length, results: res };
+    }
+    return { count: res.count || 0, results: res.results || [] };
+  },
+
+  deleteCard: async (cardId: string): Promise<void> => {
+    await apiRequest<void>(`/payments/cards/${cardId}/`, { method: 'DELETE' });
+  },
+
+  setDefaultCard: async (cardId: string): Promise<SavedCard> => {
+    return apiRequest<SavedCard>(`/payments/cards/${cardId}/set_default/`, { method: 'POST' });
+  },
+
+  createStripeIntent: async (data: { order_id: string; save_card?: boolean }): Promise<StripeIntentResponse> => {
+    return apiRequest<StripeIntentResponse>('/payments/stripe/create-payment-intent/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  confirmStripePayment: async (data: { payment_intent_id: string }): Promise<{ status: string; order_number?: string; detail?: string }> => {
+    return apiRequest<{ status: string; order_number?: string; detail?: string }>('/payments/stripe/confirm/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  chargeAuthorizeNet: async (data: AuthorizeNetChargeRequest): Promise<{ status: string; order_number?: string; detail?: string }> => {
+    return apiRequest<{ status: string; order_number?: string; detail?: string }>('/payments/authorize-net/charge/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  adminTransactions: async (params: { gateway?: string; status?: string; search?: string } = {}): Promise<PaymentTransaction[]> => {
+    const query = new URLSearchParams();
+    if (params.gateway) query.set('gateway', params.gateway);
+    if (params.status) query.set('status', params.status);
+    if (params.search) query.set('search', params.search);
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/transactions/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  adminReplayWebhook: async (webhookId: string): Promise<{ status: string; message: string }> => {
+    return apiRequest<{ status: string; message: string }>(`/admin/webhooks/${webhookId}/replay/`, {
+      method: 'POST',
+    });
+  },
+};
+
 // Default export
 export default {
   Auth: AuthAPI,
@@ -1897,8 +2022,10 @@ export default {
   Tax: TaxAPI,
   Shipping: ShippingAPI,
   Order: OrderAPI,
+  Payment: PaymentAPI,
   Token: TokenService,
 };
+
 
 
 

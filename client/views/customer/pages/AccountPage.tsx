@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../../components/Icon';
-import API, { AddressData, Order } from '../../../services/api';
+import API, { AddressData, Order, SavedCard } from '../../../services/api';
 
 interface AccountPageProps {
   onLogout?: () => void;
@@ -16,9 +16,13 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'notifications' | 'security' | 'vendor_apply'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'notifications' | 'security' | 'vendor_apply' | 'payments'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Saved Payment Cards State (Sprint 11)
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
 
   // Orders State (Sprint 10)
   const [orders, setOrders] = useState<Order[]>([]);
@@ -85,11 +89,48 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
     fetchAddresses();
     fetchNotifications();
     fetchOrders();
+    fetchCards();
   }, []);
 
   const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  const fetchCards = async () => {
+    try {
+      setCardsLoading(true);
+      const data = await API.Payment.listCards();
+      setSavedCards(data.results || []);
+    } catch (err: any) {
+      console.error('Failed to fetch saved cards:', err);
+    } finally {
+      setCardsLoading(false);
+    }
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    if (!window.confirm('Are you sure you want to remove this saved payment card?')) return;
+    try {
+      await API.Payment.deleteCard(cardId);
+      setSavedCards(prev => prev.filter(c => c.id !== cardId));
+      showMsg('Payment card removed successfully.');
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to remove card.', 'error');
+    }
+  };
+
+  const handleSetDefaultCard = async (cardId: string) => {
+    try {
+      await API.Payment.setDefaultCard(cardId);
+      setSavedCards(prev => prev.map(c => ({
+        ...c,
+        is_default: c.id === cardId,
+      })));
+      showMsg('Default payment card updated.');
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to update default card.', 'error');
+    }
   };
 
   const fetchOrders = async () => {
@@ -436,6 +477,15 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
               }`}
             >
               <Icon name="lock" className="w-5 h-5 mr-3" /> Security & 2FA
+            </button>
+            <button
+              id="account-tab-payments"
+              onClick={() => setActiveTab('payments')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === 'payments' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Icon name="credit-card" className="w-5 h-5 mr-3" /> Payment Methods ({savedCards.length})
             </button>
             {profile.role === 'customer' && (
               <button
@@ -1060,6 +1110,93 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                     </button>
                   </div>
                 </form>
+              )}
+            </div>
+          )}
+
+          {/* PAYMENT METHODS TAB (Sprint 11) */}
+          {activeTab === 'payments' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Payment Methods</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Manage your tokenized payment cards for one-click luxury checkout.</p>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-stone-500 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+                  <Icon name="lock" className="w-4 h-4 text-emerald-600" />
+                  <span>PCI-DSS Level 1 Vault Encrypted</span>
+                </div>
+              </div>
+
+              {cardsLoading ? (
+                <div className="text-center py-12 text-sm text-gray-500">Loading saved payment methods...</div>
+              ) : savedCards.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                  <div className="w-12 h-12 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center mx-auto mb-3">
+                    <Icon name="credit-card" className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-1">No Saved Payment Cards</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
+                    When you place an order, check "Save card for future purchases" to safely store tokenized credentials here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {savedCards.map((card) => (
+                    <div
+                      key={card.id}
+                      className={`relative rounded-xl border p-5 transition-all ${
+                        card.is_default ? 'border-primary bg-stone-50/50 shadow-sm' : 'border-stone-200 bg-white hover:border-stone-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-7 rounded bg-stone-900 text-white flex items-center justify-center font-mono font-bold text-[10px] tracking-wider uppercase">
+                            {card.brand}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 text-sm capitalize">
+                              {card.nickname || `${card.brand} ending in ${card.last4}`}
+                            </p>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">{card.gateway.replace('_', ' ')}</p>
+                          </div>
+                        </div>
+                        {card.is_default ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            Default
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-600 pt-2 border-t border-stone-100">
+                        <div>
+                          <span className="text-gray-400 block text-[10px]">EXPIRES</span>
+                          <span className="font-medium font-mono">
+                            {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {!card.is_default && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultCard(card.id)}
+                              className="text-xs text-stone-600 hover:text-stone-900 font-medium px-2 py-1 rounded hover:bg-stone-100 transition-colors"
+                            >
+                              Make Default
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCard(card.id)}
+                            className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

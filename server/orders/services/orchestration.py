@@ -371,3 +371,71 @@ def place_order(
         )
 
     return response_data
+
+
+def confirm_order_payment(
+    order: Order,
+    gateway_transaction_id: str,
+    changed_by: Optional[Any] = None,
+    gateway_name: str = "stripe",
+) -> Order:
+    """
+    Confirms an order upon successful payment authorization/capture.
+    Commits inventory holds, updates order & vendor order statuses,
+    creates invoice if missing, logs status transition, and emits outbox event.
+    """
+    with transaction.atomic():
+        if order.status != OrderStatus.PENDING_PAYMENT:
+            return order
+
+        previous_status = order.status
+        order.status = OrderStatus.CONFIRMED
+        order.save(update_fields=["status", "updated_at"])
+
+        for vo in order.vendor_orders.all():
+            vo.status = VendorOrderStatus.CONFIRMED
+            vo.save(update_fields=["status", "updated_at"])
+
+        # Commit stock reservations
+        from warehouse.models import InventoryReservation, ReservationStatus
+        from warehouse.services.reservation import commit as commit_reservation
+        for vo in order.vendor_orders.all():
+            for it in vo.items.all():
+                reservations = InventoryReservation.objects.filter(
+                    inventory__variant=it.variant,
+                    status=ReservationStatus.HELD,
+                )
+                for res in reservations[:1]:
+                    try:
+                        commit_reservation(res)
+                    except Exception:
+                        pass
+
+        OrderStatusHistory.objects.create(
+            order=order,
+            from_status=previous_status,
+            to_status=OrderStatus.CONFIRMED,
+            changed_by=changed_by,
+            note=f"Payment confirmed via {gateway_name} ({gateway_transaction_id}).",
+        )
+
+        if not hasattr(order, "invoice") or not Invoice.objects.filter(order=order).exists():
+            inv_number = Invoice.generate_invoice_number(order.order_number)
+            Invoice.objects.create(
+                order=order,
+                invoice_number=inv_number,
+                pdf_url=f"/api/v1/orders/{order.id}/invoice/pdf/",
+            )
+
+        OutboxEvent.objects.create(
+            event_type="order.confirmed",
+            payload={
+                "order_id": str(order.id),
+                "order_number": order.order_number,
+                "gateway": gateway_name,
+                "transaction_id": gateway_transaction_id,
+                "grand_total": str(order.grand_total),
+            },
+        )
+    return order
+

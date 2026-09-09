@@ -53,8 +53,8 @@ LOCAL_APPS = [
     "shipping",
     # Sprint 10:
     "orders",
-    # Added sprint-by-sprint:
-    # "payments",
+    # Sprint 11:
+    "payments",
 ]
 
 
@@ -224,6 +224,12 @@ SHIPPING_PROVIDER = env("SHIPPING_PROVIDER", default="fake")  # fake | easypost 
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+
+# ── Authorize.Net ─────────────────────────────────────────────────────────────
+AUTHORIZENET_API_LOGIN_ID = env("AUTHORIZENET_API_LOGIN_ID", default="")
+AUTHORIZENET_TRANSACTION_KEY = env("AUTHORIZENET_TRANSACTION_KEY", default="")
+AUTHORIZENET_SIGNATURE_KEY = env("AUTHORIZENET_SIGNATURE_KEY", default="")
+AUTHORIZENET_ENVIRONMENT = env("AUTHORIZENET_ENVIRONMENT", default="SANDBOX")
 
 # ── EasyPost / Shippo ─────────────────────────────────────────────────────────
 EASYPOST_API_KEY = env("EASYPOST_API_KEY", default="")

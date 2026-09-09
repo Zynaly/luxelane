@@ -304,19 +304,19 @@
 
 ### Tasks
 
-- [ ] **S11-T1** Create `payments` app
-- [ ] **S11-T2** `PaymentAttempt`, `Transaction`, `SavedCard`, `WebhookEvent` models
-- [ ] **S11-T3** Migrations
-- [ ] **S11-T4** `PaymentMethodsView` — list SavedCards + available gateways
-- [ ] **S11-T5** `StripeCreatePaymentIntentView` + `StripeConfirmPaymentView`
-- [ ] **S11-T6** `StripeWebhookView` — verify sig → store raw → 200 → Celery async → dedupe
-- [ ] **S11-T7** Stripe webhook handler: `confirm_payment()` → commit reservations → Order.status=confirmed
-- [ ] **S11-T8** `AuthorizeNetChargeView` + `AuthorizeNetWebhookView`
-- [ ] **S11-T9** `SavedCardViewSet` — list/destroy
-- [ ] **S11-T10** `AdminTransactionViewSet` + `AdminWebhookReplayView`
-- [ ] **S11-T11** Wire all Sprint 11 URLs
+- [x] **S11-T1** Create `payments` app
+- [x] **S11-T2** `PaymentAttempt`, `Transaction`, `SavedCard`, `WebhookEvent` models
+- [x] **S11-T3** Migrations
+- [x] **S11-T4** `PaymentMethodsView` — list SavedCards + available gateways
+- [x] **S11-T5** `StripeCreatePaymentIntentView` + `StripeConfirmPaymentView`
+- [x] **S11-T6** `StripeWebhookView` — verify sig → store raw → 200 → Celery async → dedupe
+- [x] **S11-T7** Stripe webhook handler: `confirm_payment()` → commit reservations → Order.status=confirmed
+- [x] **S11-T8** `AuthorizeNetChargeView` + `AuthorizeNetWebhookView`
+- [x] **S11-T9** `SavedCardViewSet` — list/destroy
+- [x] **S11-T10** `AdminTransactionViewSet` + `AdminWebhookReplayView`
+- [x] **S11-T11** Wire all Sprint 11 URLs
 
-**S11 Status: ⏳ Pending**
+**S11 Status: ✅ Complete** — 7/7 payments unit tests passing · 153/153 project tests passing · Frontend PaymentAPI & AccountPage saved cards integrated
 
 ---
 

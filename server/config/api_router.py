@@ -34,6 +34,7 @@ from orders.urls import (
     checkout_order_urlpatterns,
     orders_admin_urls,
 )
+from payments.urls import admin_urlpatterns as payments_admin_urls
 
 # Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
 combined_admin_urls = (
@@ -43,6 +44,7 @@ combined_admin_urls = (
     + cart_admin_urls
     + shipping_admin_urls
     + orders_admin_urls
+    + payments_admin_urls
 )
 
 combined_checkout_urls = (
@@ -91,6 +93,9 @@ urlpatterns = [
 
     # Sprint 10 — Orders & Checkout Orchestration
     path("orders/", include((order_urlpatterns, "orders"))),
+
+    # Sprint 11 — Online Payments & Webhooks
+    path("payments/", include("payments.urls")),
 
     # All admin sub-patterns merged under a single admin/ prefix
     path("admin/", include((combined_admin_urls, "admin-api"))),
