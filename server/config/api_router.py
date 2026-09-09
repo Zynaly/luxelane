@@ -37,6 +37,7 @@ from orders.urls import (
     orders_admin_urls,
 )
 from payments.urls import admin_urlpatterns as payments_admin_urls
+from core.urls.admin import admin_urlpatterns as core_admin_urls
 
 # Merge all admin sub-patterns into a single list to avoid multiple path("admin/") conflicts
 combined_admin_urls = (
@@ -47,7 +48,9 @@ combined_admin_urls = (
     + shipping_admin_urls
     + orders_admin_urls
     + payments_admin_urls
+    + core_admin_urls
 )
+
 
 combined_checkout_urls = (
     tax_urlpatterns

@@ -418,6 +418,73 @@ export interface VendorPolicyData {
   updated_at?: string;
 }
 
+export interface PayoutAdjustmentItem {
+  id: string;
+  amount: string;
+  reason: 'chargeback' | 'fee' | 'refund' | 'bonus' | 'other';
+  note?: string;
+  applied_at: string;
+}
+
+export interface PayoutLineItem {
+  id: string;
+  vendor_order_id: string;
+  order_number: string;
+  item_type: 'order_sale' | 'adjustment' | 'fee';
+  gross_amount: string;
+  commission_amount: string;
+  net_amount: string;
+  delivered_at?: string | null;
+  created_at: string;
+}
+
+export interface VendorPayout {
+  id: string;
+  payout_reference: string;
+  period_start: string;
+  period_end: string;
+  gross_sales: string;
+  commission_deducted: string;
+  adjustments_total: string;
+  net_amount: string;
+  status: 'scheduled' | 'processing' | 'paid' | 'failed' | 'cancelled';
+  bank_account_info: Record<string, any>;
+  notes?: string;
+  processed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  line_items?: PayoutLineItem[];
+  adjustments?: PayoutAdjustmentItem[];
+}
+
+export interface VendorAnalyticsRevenueDay {
+  date: string;
+  gross_sales: string;
+  net_earnings: string;
+  orders: number;
+}
+
+export interface VendorAnalyticsTopProduct {
+  variant_id: string;
+  product_name: string;
+  sku: string;
+  units_sold: number;
+  revenue: string;
+}
+
+export interface VendorAnalytics {
+  days: number;
+  start_date: string;
+  end_date: string;
+  total_orders: number;
+  gross_sales: string;
+  commission_paid: string;
+  net_earnings: string;
+  return_rate_pct: string;
+  revenue_by_day: VendorAnalyticsRevenueDay[];
+  top_products: VendorAnalyticsTopProduct[];
+}
+
 export const VendorAPI = {
   apply: async (data: {
     legal_name: string;
@@ -523,6 +590,23 @@ export const VendorAPI = {
       body: JSON.stringify(data),
     });
   },
+
+  // Sprint 15 Vendor Payouts & Analytics
+  getMyPayouts: async (params: { status?: string } = {}): Promise<VendorPayout[]> => {
+    const q = new URLSearchParams();
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/vendors/me/payouts/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getMyPayout: async (id: string): Promise<VendorPayout> => {
+    return apiRequest<VendorPayout>(`/vendors/me/payouts/${id}/`, { method: 'GET' });
+  },
+
+  getAnalytics: async (days: number = 30): Promise<VendorAnalytics> => {
+    return apiRequest<VendorAnalytics>(`/vendors/me/analytics/?days=${days}`, { method: 'GET' });
+  },
 };
 
 // ── Admin APIs (Sprint 1, 2 & 3) ─────────────────────────────────────────────
@@ -536,6 +620,78 @@ export interface CommissionRuleItem {
   is_active: boolean;
   note?: string;
   created_at?: string;
+}
+
+export interface AdminDashboardStats {
+  gmv: string;
+  active_vendors: number;
+  orders_today: number;
+  pending_payouts_count: number;
+  pending_payouts_amount: string;
+  ledger_drift_detected: boolean;
+  ledger_drift_amount: string;
+}
+
+export interface SalesReportDailyBreakdown {
+  date: string;
+  order_count: number;
+  sales: string;
+}
+
+export interface AdminSalesReport {
+  start_date: string;
+  end_date: string;
+  total_orders: number;
+  gross_sales: string;
+  net_subtotal: string;
+  shipping_total: string;
+  tax_total: string;
+  discount_total: string;
+  commission_total: string;
+  daily_breakdown: SalesReportDailyBreakdown[];
+}
+
+export interface InventoryReportWarehouse {
+  warehouse_id: string;
+  name: string;
+  on_hand: number;
+  reserved: number;
+  sku_count: number;
+}
+
+export interface AdminInventoryReport {
+  total_skus: number;
+  total_units_on_hand: number;
+  total_units_reserved: number;
+  low_stock_skus: number;
+  out_of_stock_skus: number;
+  warehouses: InventoryReportWarehouse[];
+}
+
+export interface AdminVendorPerformanceItem {
+  vendor_id: string;
+  display_name: string;
+  legal_name: string;
+  status: string;
+  rating_avg: string;
+  order_count: number;
+  gmv: string;
+  commission_paid: string;
+  net_earned: string;
+  return_requests_count: number;
+}
+
+export interface ExportJob {
+  id: string;
+  resource: 'orders' | 'products' | 'vendors' | 'payouts' | 'sales';
+  format: 'csv' | 'json';
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  file_url?: string | null;
+  result_json?: any;
+  error_message?: string;
+  created_by_email?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export const AdminAPI = {
@@ -625,6 +781,59 @@ export const AdminAPI = {
     return apiRequest<void>(`/admin/commission-rules/${id}/`, {
       method: 'DELETE',
     });
+  },
+
+  // Sprint 15 Admin Payouts, Reports & Exports
+  listPayouts: async (params: { vendor_id?: string; status?: string } = {}): Promise<VendorPayout[]> => {
+    const q = new URLSearchParams();
+    if (params.vendor_id) q.set('vendor_id', params.vendor_id);
+    if (params.status) q.set('status', params.status);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await apiRequest<any>(`/admin/payouts/${qs}`, { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  getPayout: async (id: string): Promise<VendorPayout> => {
+    return apiRequest<VendorPayout>(`/admin/payouts/${id}/`, { method: 'GET' });
+  },
+
+  processPayouts: async (data: { vendor_id?: string; period_end?: string } = {}): Promise<{ detail: string; processed_count: number; payouts: VendorPayout[] }> => {
+    return apiRequest<{ detail: string; processed_count: number; payouts: VendorPayout[] }>('/admin/payouts/process/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  getDashboardStats: async (): Promise<AdminDashboardStats> => {
+    return apiRequest<AdminDashboardStats>('/admin/dashboard/stats/', { method: 'GET' });
+  },
+
+  getSalesReport: async (params: { start_date?: string; end_date?: string } = {}): Promise<AdminSalesReport> => {
+    const q = new URLSearchParams();
+    if (params.start_date) q.set('start_date', params.start_date);
+    if (params.end_date) q.set('end_date', params.end_date);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    return apiRequest<AdminSalesReport>(`/admin/reports/sales/${qs}`, { method: 'GET' });
+  },
+
+  getInventoryReport: async (): Promise<AdminInventoryReport> => {
+    return apiRequest<AdminInventoryReport>('/admin/reports/inventory/', { method: 'GET' });
+  },
+
+  getVendorPerformanceReport: async (): Promise<AdminVendorPerformanceItem[]> => {
+    const res = await apiRequest<any>('/admin/reports/vendor-performance/', { method: 'GET' });
+    return res.results || res || [];
+  },
+
+  createExport: async (resource: string, format: 'csv' | 'json' = 'csv'): Promise<ExportJob> => {
+    return apiRequest<ExportJob>(`/admin/exports/${resource}/`, {
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  },
+
+  getExportStatus: async (resource: string, jobId: string): Promise<ExportJob> => {
+    return apiRequest<ExportJob>(`/admin/exports/${resource}/${jobId}/`, { method: 'GET' });
   },
 };
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 vendors/serializers.py — Sprint 3: Vendors, KYC, Staff, Commission serializers.
 """
 import re
@@ -218,3 +218,82 @@ class AdminCommissionRuleSerializer(serializers.ModelSerializer):
 
     def get_vendor_name(self, obj):
         return obj.vendor.display_name if obj.vendor_id else "Platform Default"
+
+
+# ── Sprint 15: Payouts & Analytics Serializers ────────────────────────────────
+
+from vendors.models import VendorPayout, PayoutLineItem, PayoutAdjustment
+
+
+class PayoutLineItemSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField(source="vendor_order.order.order_number", read_only=True)
+
+    class Meta:
+        model = PayoutLineItem
+        fields = [
+            "id",
+            "vendor_order",
+            "order_number",
+            "amount",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class PayoutAdjustmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayoutAdjustment
+        fields = [
+            "id",
+            "amount",
+            "reason",
+            "source_reference_id",
+            "note",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class VendorPayoutSerializer(serializers.ModelSerializer):
+    vendor_name = serializers.CharField(source="vendor.display_name", read_only=True)
+    line_items  = PayoutLineItemSerializer(many=True, read_only=True)
+    adjustments = PayoutAdjustmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = VendorPayout
+        fields = [
+            "id",
+            "vendor",
+            "vendor_name",
+            "period_start",
+            "period_end",
+            "gross_amount",
+            "adjustments_total",
+            "net_amount",
+            "status",
+            "disbursed_at",
+            "external_transfer_id",
+            "ledger_entry_group_id",
+            "line_items",
+            "adjustments",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class AdminPayoutProcessSerializer(serializers.Serializer):
+    vendor_id    = serializers.UUIDField(required=False, allow_null=True)
+    period_start = serializers.DateField(required=False, allow_null=True)
+    period_end   = serializers.DateField(required=False, allow_null=True)
+    process_all  = serializers.BooleanField(default=False)
+
+
+class VendorAnalyticsSerializer(serializers.Serializer):
+    period_days    = serializers.IntegerField()
+    order_count    = serializers.IntegerField()
+    gross_revenue  = serializers.CharField()
+    net_revenue    = serializers.CharField()
+    return_rate    = serializers.CharField()
+    revenue_by_day = serializers.ListField(child=serializers.DictField())
+    top_products   = serializers.ListField(child=serializers.DictField())
+

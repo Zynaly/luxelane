@@ -6,6 +6,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
+from django.test import override_settings
 
 from accounts.models import Address
 from catalog.models import Category, Brand, Product, ProductVariant
@@ -30,6 +31,7 @@ from payments.tasks import process_webhook_event
 User = get_user_model()
 
 
+@override_settings(PAYMENT_GATEWAY="fake")
 class PaymentsAppTests(APITestCase):
     def setUp(self):
         # 1. Users

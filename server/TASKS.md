@@ -401,19 +401,19 @@
 
 ### Tasks
 
-- [ ] **S15-T1** `VendorPayout`, `PayoutLineItem`, `PayoutAdjustment` models
-- [ ] **S15-T2** Migrations
-- [ ] **S15-T3** `payouts.services.run_payout_batch()` — idempotent, keyed vendor+period
-- [ ] **S15-T4** `EscrowReleaseJob` — Celery beat, idempotent past-due release
-- [ ] **S15-T5** `VendorMyPayoutsViewSet` — list/retrieve
-- [ ] **S15-T6** `VendorAnalyticsView` — revenue_by_day, top_products, order_count, return_rate
-- [ ] **S15-T7** `AdminPayoutProcessView` — enqueue payout batch
-- [ ] **S15-T8** `AdminDashboardStatsView` — nightly rollup tables
-- [ ] **S15-T9** `AdminReportViewSet` — sales / inventory / vendor-performance
-- [ ] **S15-T10** `AdminExportView` + `AdminExportStatusView` — CSV/XLSX Celery export job
-- [ ] **S15-T11** Wire all Sprint 15 URLs
+- [x] **S15-T1** `VendorPayout`, `PayoutLineItem`, `PayoutAdjustment` models
+- [x] **S15-T2** Migrations
+- [x] **S15-T3** `payouts.services.run_payout_batch()` — idempotent, keyed vendor+period
+- [x] **S15-T4** `EscrowReleaseJob` — Celery beat, idempotent past-due release
+- [x] **S15-T5** `VendorMyPayoutsViewSet` — list/retrieve
+- [x] **S15-T6** `VendorAnalyticsView` — revenue_by_day, top_products, order_count, return_rate
+- [x] **S15-T7** `AdminPayoutProcessView` — enqueue payout batch
+- [x] **S15-T8** `AdminDashboardStatsView` — nightly rollup tables
+- [x] **S15-T9** `AdminReportViewSet` — sales / inventory / vendor-performance
+- [x] **S15-T10** `AdminExportView` + `AdminExportStatusView` — CSV/XLSX Celery export job
+- [x] **S15-T11** Wire all Sprint 15 URLs
 
-**S15 Status: ⏳ Pending**
+**S15 Status: ✅ Complete**
 
 ---
 
@@ -484,4 +484,4 @@ server/
 
 ---
 
-*Last updated: **Sprint 0 ✅ Complete · Sprint 1 ⏳ Next** · 2026-09-04*
+*Last updated: **Sprint 15 ✅ Complete · Sprint 16 ⏳ Next** · 2026-09-09*

@@ -1,10 +1,11 @@
-﻿"""
+"""
 vendors/admin.py — Django admin for all vendor models.
 """
 from django.contrib import admin
 from vendors.models import (
     Vendor, VendorStaff, VendorDocument,
     VendorBankAccount, VendorPolicy, CommissionRule,
+    VendorPayout, PayoutLineItem, PayoutAdjustment,
 )
 
 
@@ -58,3 +59,37 @@ class CommissionRuleAdmin(admin.ModelAdmin):
     list_filter   = ["is_active"]
     search_fields = ["vendor__display_name"]
     readonly_fields = ["id", "created_at", "updated_at"]
+
+
+class PayoutLineItemInline(admin.TabularInline):
+    from vendors.models import PayoutLineItem
+    model = PayoutLineItem
+    extra = 0
+    readonly_fields = ["vendor_order", "amount", "created_at"]
+
+
+class PayoutAdjustmentInline(admin.TabularInline):
+    from vendors.models import PayoutAdjustment
+    model = PayoutAdjustment
+    extra = 0
+    readonly_fields = ["amount", "reason", "source_reference_id", "created_at"]
+
+
+@admin.register(VendorPayout)
+class VendorPayoutAdmin(admin.ModelAdmin):
+    from vendors.models import VendorPayout
+    list_display = ["id", "vendor", "period_start", "period_end", "net_amount", "status", "disbursed_at", "created_at"]
+    list_filter = ["status", "period_start", "period_end"]
+    search_fields = ["vendor__display_name", "external_transfer_id"]
+    readonly_fields = ["id", "gross_amount", "adjustments_total", "net_amount", "ledger_entry_group_id", "created_at", "updated_at"]
+    inlines = [PayoutLineItemInline, PayoutAdjustmentInline]
+
+
+@admin.register(PayoutAdjustment)
+class PayoutAdjustmentAdmin(admin.ModelAdmin):
+    from vendors.models import PayoutAdjustment
+    list_display = ["id", "vendor", "payout", "amount", "reason", "created_at"]
+    list_filter = ["reason"]
+    search_fields = ["vendor__display_name", "note"]
+    readonly_fields = ["id", "created_at", "updated_at"]
+

@@ -210,6 +210,40 @@ class LedgerService:
         )
 
     @classmethod
+    def post_vendor_payout(cls, payout, memo: str = "") -> uuid.UUID:
+        """
+        Disburses settled funds to vendor via external transfer:
+        DR: Vendor Payable (+net_amount, reducing liability)
+        CR: Platform Cash (-net_amount, reducing cash balance)
+        """
+        vendor_id = payout.vendor_id
+        amount = payout.net_amount
+
+        entries = [
+            {
+                "account": f"vendor_payable:{vendor_id}",
+                "account_type": LedgerAccountType.VENDOR_PAYABLE,
+                "owner_vendor_id": vendor_id,
+                "amount": amount,
+                "memo": f"Disbursement settlement for payout {payout.id}",
+            },
+            {
+                "account": "platform_cash",
+                "account_type": LedgerAccountType.PLATFORM_CASH,
+                "amount": -amount,
+                "memo": f"Payout transfer to {payout.vendor.display_name}",
+            },
+        ]
+
+        return cls.post(
+            entries=entries,
+            reference_type="payout",
+            reference_id=payout.id,
+            memo=memo or f"Payout disbursement for {payout.vendor.display_name}",
+        )
+
+
+    @classmethod
     def post_wallet_deposit(cls, user: User, amount: Decimal, memo: str = "Store credit deposit") -> uuid.UUID:
         """
         Adds store credit to a customer's wallet:

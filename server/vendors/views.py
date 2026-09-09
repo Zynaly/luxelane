@@ -1,4 +1,4 @@
-﻿"""
+"""
 vendors/views.py — Sprint 3: Vendors, KYC, Staff, Commission views.
 
 Architecture:
@@ -288,3 +288,114 @@ class AdminCommissionRuleViewSet(viewsets.ModelViewSet):
     serializer_class   = AdminCommissionRuleSerializer
     queryset           = CommissionRule.objects.select_related("vendor").order_by("-effective_from")
     filterset_fields   = ["vendor", "is_active"]
+
+
+# ── Sprint 15: Vendor Payouts & Analytics Views ───────────────────────────────
+
+import datetime
+from django.utils import timezone
+from core.permissions import IsPlatformOrFinanceAdmin
+from vendors.models import VendorPayout
+from vendors.serializers import (
+    VendorPayoutSerializer,
+    AdminPayoutProcessSerializer,
+    VendorAnalyticsSerializer,
+)
+from vendors.services.payouts import payout_service
+from vendors.services.analytics import vendor_analytics_service
+
+
+@extend_schema(tags=["Vendor — Payouts"])
+class VendorMyPayoutsViewSet(ScopedToVendorMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    GET /vendors/me/payouts/ — List settled payouts for authenticated vendor.
+    GET /vendors/me/payouts/{id}/ — Detail of specific payout including line items and adjustments.
+    """
+    permission_classes = [IsVendorMember]
+    serializer_class   = VendorPayoutSerializer
+
+    def get_queryset(self):
+        vendor = self.get_vendor()
+        return (
+            VendorPayout.objects.filter(vendor=vendor)
+            .select_related("vendor")
+            .prefetch_related("line_items", "adjustments")
+            .order_by("-created_at")
+        )
+
+
+@extend_schema(tags=["Vendor — Analytics"], responses={200: VendorAnalyticsSerializer})
+class VendorAnalyticsView(ScopedToVendorMixin, APIView):
+    """
+    GET /vendors/me/analytics/ — Revenue time-series, top-selling products, order velocity, and return rates.
+    """
+    permission_classes = [IsVendorMember]
+
+    def get(self, request):
+        vendor = self.get_vendor()
+        days = int(request.query_params.get("days", 30))
+        data = vendor_analytics_service.get_analytics(vendor=vendor, days=days)
+        return Response(data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Admin — Payouts"])
+class AdminPayoutProcessView(APIView):
+    """
+    POST /admin/vendors/{id}/payouts/process/ or POST /admin/payouts/process/
+    Processes an idempotent settlement payout batch for a specific vendor or all due vendors.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def post(self, request, id=None, pk=None):
+        serializer = AdminPayoutProcessSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        target_vendor_id = id or pk or data.get("vendor_id")
+        process_all = data.get("process_all", False)
+
+        if process_all or not target_vendor_id:
+            payouts = payout_service.run_all_due_payouts(
+                period_start=data.get("period_start"),
+                period_end=data.get("period_end"),
+                performed_by=request.user,
+            )
+            return Response(
+                {
+                    "detail": f"Processed {len(payouts)} vendor settlements.",
+                    "payouts": VendorPayoutSerializer(payouts, many=True).data,
+                    "count": len(payouts),
+                },
+                status=status.HTTP_201_CREATED if payouts else status.HTTP_200_OK,
+            )
+
+        vendor = get_object_or_404(Vendor, pk=target_vendor_id, is_deleted=False)
+        period_end = data.get("period_end") or timezone.now().date()
+        period_start = data.get("period_start") or (period_end - datetime.timedelta(days=14))
+
+        payout = payout_service.run_payout_batch(
+            vendor=vendor,
+            period_start=period_start,
+            period_end=period_end,
+            performed_by=request.user,
+        )
+        if not payout:
+            return Response(
+                {"detail": "No eligible mature funds or adjustments to settle for this vendor/period."},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response(VendorPayoutSerializer(payout).data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["Admin — Payouts"])
+class AdminVendorPayoutViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /admin/payouts/ — PlatformAdmin/FinanceAdmin view of all vendor payout disbursements.
+    GET /admin/payouts/{id}/ — Payout detail with line items and clawback adjustments.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+    serializer_class   = VendorPayoutSerializer
+    queryset           = VendorPayout.objects.all().select_related("vendor").prefetch_related("line_items", "adjustments")
+    filterset_fields   = ["vendor", "status"]
+
