@@ -243,7 +243,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       case 'contact': return <ContactPage onOpenChat={() => setIsChatOpen(true)} />;
       case 'cart': return <CartPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'account': return <AccountPage onLogout={onLogout} />;
-      default: return <HomePage onNavigate={setPage} onCartChange={setCartCount} />;
+      default: return <HomePage onNavigate={setPage} />;
     }
   };
 

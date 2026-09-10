@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import API, { ProductListItem, CategoryItem } from '../../services/api';
 import { Icon } from '../../components/Icon';
+import API, { ProductListItem, CategoryItem } from '../../services/api';
 
 interface HomePageProps {
-  onNavigate?: (page: 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account') => void;
-  onCartChange?: (count: number) => void;
+  onNavigate: (page: 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account') => void;
+  onCartChange?: (itemCount: number) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) => {
@@ -12,276 +12,246 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) 
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState<string | null>(null);
-  const [addedToast, setAddedToast] = useState<{ title: string; price: string; image?: string | null } | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const [prodList, catList] = await Promise.allSettled([
-          API.Product.list(),
-          API.Category.list(),
-        ]);
-
-        if (isMounted) {
-          if (prodList.status === 'fulfilled' && prodList.value && prodList.value.length > 0) {
-            setProducts(prodList.value);
-          }
-          if (catList.status === 'fulfilled' && catList.value && catList.value.length > 0) {
-            setCategories(catList.value);
-          }
+    let active = true;
+    Promise.all([
+      API.Product.list(),
+      API.Category.list(),
+    ])
+      .then(([prods, cats]) => {
+        if (active) {
+          setProducts(prods);
+          setCategories(cats);
         }
-      } catch (err) {
-        console.warn('Failed to load live catalog:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    loadData();
-    return () => { isMounted = false; };
+      })
+      .catch((err) => console.error('Failed to load home catalog:', err))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
   }, []);
 
-  const handleAddToCart = async (e: React.MouseEvent, product: ProductListItem) => {
-    e.preventDefault();
-    e.stopPropagation();
-
+  const handleAddToCart = async (product: ProductListItem) => {
     try {
       setAddingId(product.id);
-      let variantId = product.default_variant_id;
-
-      // Fallback: if variant_id not attached, fetch product detail
+      let variantId = product.primary_variant_id;
       if (!variantId) {
         const detail = await API.Product.retrieve(product.id);
-        variantId = detail.variants?.[0]?.id;
+        if (detail.variants && detail.variants.length > 0) {
+          variantId = detail.variants[0].id;
+        }
       }
-
-      if (!variantId) {
-        alert('This product does not have an active variant available for purchase.');
-        return;
-      }
-
+      if (!variantId) throw new Error('No available stock variant.');
       await API.Cart.addItem({ variant_id: variantId, quantity: 1 });
-
-      // Refresh cart summary count
-      try {
-        const summary = await API.Cart.getSummary();
-        onCartChange?.(summary.item_count || 0);
-      } catch {
-        // Increment fallback
-        onCartChange?.((prev) => (typeof prev === 'number' ? prev + 1 : 1));
-      }
-
-      // Show toast
-      setAddedToast({
-        title: product.title,
-        price: product.base_price,
-        image: product.primary_image,
-      });
-
-      // Auto dismiss toast after 5s
-      setTimeout(() => {
-        setAddedToast(null);
-      }, 5000);
+      const summary = await API.Cart.getSummary();
+      onCartChange?.(summary.item_count || 0);
+      setToastMsg(`Added "${product.title}" to bag`);
+      setTimeout(() => setToastMsg(null), 3500);
     } catch (err: any) {
-      console.error('Failed to add to bag:', err);
-      alert(err.message || 'Failed to add item to shopping bag. Please try again.');
+      alert(err.message || 'Could not add to bag');
     } finally {
       setAddingId(null);
     }
   };
 
-  const featured = products.slice(0, 4);
-  const newArrivals = products.slice(2, 6);
+  const featuredProducts = products.slice(0, 4);
+  const newArrivals = products.slice(4, 12);
+
+  // Key curated categories
+  const heroCategories = [
+    {
+      slug: 'clothes',
+      name: 'Clothes & Couture',
+      subtitle: 'Italian Silk & Cashmere',
+      image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'shoes',
+      name: 'Luxury Footwear',
+      subtitle: 'Artisanal Box Calf & Pumps',
+      image: 'https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'cosmetics',
+      name: 'Cosmetics & Perfumes',
+      subtitle: 'Botanical Elixirs & Extraits',
+      image: 'https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'aesthetic-gifts',
+      name: 'Aesthetic Gifts & Living',
+      subtitle: 'Hand-poured Bougies & Crystal',
+      image: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=800',
+    },
+  ];
 
   return (
-    <div className="bg-white font-sans">
-      {/* Toast Notification */}
-      {addedToast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md w-full bg-dark text-white rounded-2xl p-4 shadow-2xl border border-gold/30 flex items-center justify-between space-x-4 animate-bounce-in">
-          <div className="flex items-center space-x-3 overflow-hidden">
-            {addedToast.image ? (
-              <img src={addedToast.image} alt={addedToast.title} className="w-12 h-12 object-cover rounded-xl border border-gray-700 flex-shrink-0" />
-            ) : (
-              <div className="w-12 h-12 bg-gray-800 rounded-xl flex items-center justify-center flex-shrink-0 text-accent">
-                <Icon name="cart" className="w-6 h-6" />
-              </div>
-            )}
-            <div className="truncate">
-              <p className="text-xs text-accent font-semibold uppercase tracking-wider">Added to Bag</p>
-              <p className="text-sm font-medium text-white truncate">{addedToast.title}</p>
-              <p className="text-xs text-gray-400 font-serif">${parseFloat(addedToast.price).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2 flex-shrink-0">
-            <button
-              onClick={() => { setAddedToast(null); onNavigate?.('cart'); }}
-              className="bg-accent hover:bg-accent-hover text-white text-xs font-semibold px-3.5 py-2 rounded-full transition-all shadow-md"
-            >
-              View Bag
-            </button>
-            <button
-              onClick={() => setAddedToast(null)}
-              className="text-gray-400 hover:text-white p-1"
-            >
-              <Icon name="x" className="w-4 h-4" />
-            </button>
-          </div>
+    <div className="bg-white">
+      {/* Toast */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3 border border-amber-800 animate-bounce">
+          <Icon name="check" className="w-5 h-5 text-emerald-400" />
+          <span className="text-sm font-medium">{toastMsg}</span>
+          <button onClick={() => onNavigate('cart')} className="text-amber-300 text-xs underline font-bold">
+            Checkout
+          </button>
         </div>
       )}
 
       <main>
-        {/* Hero Section */}
-        <div className="relative bg-dark">
-          <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
+        {/* Hero Banner */}
+        <div className="relative bg-stone-950 text-white overflow-hidden">
+          <div aria-hidden="true" className="absolute inset-0 opacity-40">
             <img
-              src="https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=1920"
-              alt="Luxury Haute Horology"
-              className="w-full h-full object-center object-cover opacity-50"
+              src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1920"
+              alt="Hero banner"
+              className="w-full h-full object-center object-cover"
             />
           </div>
-          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
-          <div className="relative max-w-7xl mx-auto py-28 px-6 sm:py-36 lg:px-8">
-            <div className="max-w-2xl">
-              <span className="text-xs font-semibold text-accent uppercase tracking-widest bg-accent/10 px-3 py-1 rounded-full border border-accent/30 inline-block mb-4">
-                Haute Horlogerie & Bespoke Artisans
-              </span>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-serif font-bold tracking-tight text-white leading-tight">
-                Elegance in Every Masterpiece
-              </h1>
-              <p className="mt-4 text-lg text-gray-300 font-light leading-relaxed">
-                Discover exceptional timepieces, handcrafted exotic leathers, and platinum jewelry created with uncompromising craftsmanship.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-4">
-                <button
-                  onClick={() => onNavigate?.('shop')}
-                  className="bg-accent hover:bg-accent-hover text-white rounded-full py-3.5 px-8 text-sm font-semibold transition-all transform hover:scale-105 shadow-xl shadow-accent/20"
-                >
-                  Explore Collection &rarr;
-                </button>
-                <button
-                  onClick={() => onNavigate?.('cart')}
-                  className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 rounded-full py-3.5 px-8 text-sm font-semibold transition-all"
-                >
-                  View Shopping Bag
-                </button>
-              </div>
+          <div className="relative max-w-4xl mx-auto py-28 px-6 flex flex-col items-center text-center sm:py-36">
+            <span className="text-amber-400 text-xs uppercase tracking-[0.25em] font-semibold mb-4">
+              LuxeLane Haute Marketplace
+            </span>
+            <h1 className="text-4xl sm:text-6xl font-serif font-bold tracking-tight text-white leading-tight">
+              Elegance in Every Detail
+            </h1>
+            <p className="mt-4 text-lg text-stone-300 max-w-2xl font-light">
+              Explore bespoke collections from master European maisons. Pure vicuña tailoring, handcrafted footwear, rare Grasse extraits, and aesthetic living gifts.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-4 justify-center">
+              <button
+                type="button"
+                onClick={() => onNavigate('shop')}
+                className="bg-amber-800 hover:bg-amber-900 border border-transparent rounded-full py-3 px-10 text-sm font-semibold text-white transition-colors shadow-lg"
+              >
+                Shop Full Catalog ({products.length} Items)
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('cart')}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur border border-white/30 rounded-full py-3 px-8 text-sm font-semibold text-white transition-colors"
+              >
+                View Shopping Bag
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Categories Section */}
-        <section className="py-16 bg-white border-b border-gray-100">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <span className="text-xs font-semibold text-accent uppercase tracking-widest">Departments</span>
-                <h2 className="text-2xl sm:text-3xl font-serif font-bold text-dark mt-1">Curated Maisons</h2>
-              </div>
-              <button
-                onClick={() => onNavigate?.('shop')}
-                className="text-xs font-semibold text-dark hover:text-accent flex items-center space-x-1"
-              >
-                <span>Browse All</span>
-                <span>&rarr;</span>
-              </button>
+        {/* Shop by Focus Categories */}
+        <section className="py-16 sm:py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block">
+                Handcrafted Collections
+              </span>
+              <h2 className="text-3xl font-serif font-bold text-stone-900">
+                Shop by Curated Category
+              </h2>
             </div>
+            <button
+              onClick={() => onNavigate('shop')}
+              className="text-sm font-semibold text-amber-800 hover:text-stone-900 flex items-center space-x-1"
+            >
+              <span>Explore All</span>
+              <Icon name="arrow-right" className="w-4 h-4" />
+            </button>
+          </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-              {[
-                { name: 'Fine Timepieces', slug: 'fine-timepieces', img: 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=600' },
-                { name: 'Leather Goods', slug: 'leather-goods', img: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=600' },
-                { name: 'Haute Joaillerie', slug: 'haute-joaillerie', img: 'https://images.unsplash.com/photo-1611591475822-263085521b33?auto=format&fit=crop&q=80&w=600' },
-                { name: 'Silk & Cashmere', slug: 'silk-cashmere', img: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=600' },
-              ].map((c) => (
-                <div
-                  key={c.name}
-                  onClick={() => onNavigate?.('shop')}
-                  className="group relative h-56 rounded-2xl overflow-hidden cursor-pointer shadow-sm hover:shadow-xl transition-all"
-                >
-                  <img
-                    src={c.img}
-                    alt={c.name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-dark/80 via-dark/20 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <p className="text-sm font-serif font-bold group-hover:text-accent transition-colors">{c.name}</p>
-                    <p className="text-xs text-gray-300 font-light mt-0.5">Explore Atelier &rarr;</p>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {heroCategories.map((c) => (
+              <div
+                key={c.slug}
+                onClick={() => onNavigate('shop')}
+                className="group relative h-80 rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
+              >
+                <img
+                  src={c.image}
+                  alt={c.name}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/30 to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6">
+                  <span className="text-amber-300 text-[11px] font-semibold uppercase tracking-wider block mb-1">
+                    {c.subtitle}
+                  </span>
+                  <h3 className="text-xl font-serif font-bold text-white group-hover:text-amber-200 transition-colors">
+                    {c.name}
+                  </h3>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Featured Products Section */}
-        <section className="py-20 bg-gray-50">
+        {/* Featured Products Showcase */}
+        <section className="bg-stone-50 py-16 sm:py-24 border-y border-stone-200/70">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-14">
-              <span className="text-xs font-semibold text-accent uppercase tracking-widest">Masterpieces</span>
-              <h2 className="text-3xl sm:text-4xl font-serif font-bold text-dark mt-1">Featured Creations</h2>
-              <p className="mt-3 text-sm text-gray-600 font-light">
-                Hand-finished horology and heirloom leather craft vetted by our Parisian ateliers.
+            <div className="text-center max-w-2xl mx-auto mb-12">
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-1">
+                Atelier Masterpieces
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-serif font-bold text-stone-900">
+                Featured Highlights
+              </h2>
+              <p className="mt-2 text-stone-600 text-sm">
+                Each piece certified authentic and backed by white-glove insured delivery.
               </p>
             </div>
 
             {loading ? (
-              <div className="text-center py-16">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-accent mb-3" />
-                <p className="text-xs text-gray-500 font-medium">Curating atelier vault...</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl h-80 animate-pulse" />
+                ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                {featured.map((p) => {
-                  const isAdding = addingId === p.id;
-                  const price = parseFloat(p.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 });
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {featuredProducts.map((product) => {
+                  const isAdding = addingId === product.id;
                   return (
                     <div
-                      key={p.id}
-                      className="group bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col"
+                      key={product.id}
+                      className="group bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden flex flex-col hover:shadow-xl transition-all duration-300"
                     >
-                      <div className="relative aspect-square overflow-hidden bg-gray-100">
+                      <div className="relative aspect-[4/5] bg-stone-100 overflow-hidden">
                         <img
-                          src={p.primary_image || 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=800'}
-                          alt={p.title}
-                          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                          src={product.primary_image || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=600'}
+                          alt={product.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                         />
-                        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wider text-dark shadow-sm">
-                          {p.category_name || 'Artisan'}
+                        <div className="absolute top-3 left-3">
+                          <span className="bg-white/95 backdrop-blur text-stone-900 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
+                            {product.category_name}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="p-5 flex flex-col flex-1 justify-between">
+                      <div className="p-5 flex-1 flex flex-col justify-between">
                         <div>
-                          <p className="text-[11px] font-medium text-accent uppercase tracking-wider truncate">
-                            {p.brand_name || p.vendor_display_name || 'Atelier'}
-                          </p>
-                          <h3 className="text-sm font-serif font-bold text-dark mt-1 line-clamp-2 leading-snug group-hover:text-accent transition-colors">
-                            {p.title}
+                          {product.brand_name && (
+                            <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider mb-1">
+                              {product.brand_name}
+                            </p>
+                          )}
+                          <h3 className="text-sm font-serif font-bold text-stone-900 group-hover:text-amber-900 transition-colors line-clamp-2">
+                            {product.title}
                           </h3>
                         </div>
 
-                        <div className="mt-4 pt-4 border-t border-gray-100">
-                          <div className="flex items-baseline justify-between mb-3">
-                            <span className="text-lg font-serif font-bold text-dark">${price}</span>
-                            <span className="text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">In Stock</span>
-                          </div>
-
+                        <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+                          <span className="text-base font-bold text-stone-900">
+                            ${parseFloat(product.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </span>
                           <button
                             type="button"
-                            onClick={(e) => handleAddToCart(e, p)}
+                            onClick={() => handleAddToCart(product)}
                             disabled={isAdding}
-                            className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
-                              isAdding
-                                ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                                : 'bg-dark hover:bg-accent text-white shadow-md active:scale-95'
-                            }`}
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-stone-900 hover:bg-amber-900 text-white text-xs font-semibold rounded-lg transition-colors"
                           >
-                            <Icon name="cart" className="w-4 h-4" />
-                            <span>{isAdding ? 'Adding to Bag...' : 'Add to Bag'}</span>
+                            <Icon name="cart" className="w-3.5 h-3.5" />
+                            <span>{isAdding ? '...' : 'Add'}</span>
                           </button>
                         </div>
                       </div>
@@ -293,103 +263,76 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) 
           </div>
         </section>
 
-        {/* Special Banner */}
-        <section className="relative overflow-hidden py-20 bg-dark text-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="relative z-10 bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-8 sm:p-14 border border-gray-700 shadow-2xl flex flex-col lg:flex-row items-center justify-between">
-              <div className="max-w-xl mb-8 lg:mb-0">
-                <span className="text-xs font-semibold text-accent uppercase tracking-widest">White-Glove Delivery</span>
-                <h2 className="text-3xl sm:text-4xl font-serif font-bold mt-2">
-                  Complimentary Insured Courier on All Flagship Orders
-                </h2>
-                <p className="mt-3 text-sm text-gray-300 font-light leading-relaxed">
-                  Every acquisition is dispatched directly from verified vendor vaults in tamper-proof reinforced packaging, accompanied by certificates of authenticity.
-                </p>
-              </div>
-              <div>
-                <button
-                  onClick={() => onNavigate?.('shop')}
-                  className="bg-accent hover:bg-accent-hover text-white rounded-full py-3.5 px-8 text-sm font-semibold transition-all transform hover:scale-105 shadow-lg shadow-accent/20"
-                >
-                  Shop Flagship Collection &rarr;
-                </button>
-              </div>
+        {/* New Arrivals Grid */}
+        <section className="py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-10">
+            <div>
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-1">
+                Seasonal Drop
+              </span>
+              <h2 className="text-3xl font-serif font-bold text-stone-900">
+                New Arrivals: Clothes, Shoes, Fragrance & Living
+              </h2>
             </div>
+            <button
+              onClick={() => onNavigate('shop')}
+              className="text-sm font-semibold text-amber-800 hover:text-stone-900 flex items-center space-x-1"
+            >
+              <span>View All {products.length} Products</span>
+              <Icon name="arrow-right" className="w-4 h-4" />
+            </button>
           </div>
-        </section>
 
-        {/* New Arrivals Section */}
-        <section className="py-20 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-12">
-              <div>
-                <span className="text-xs font-semibold text-accent uppercase tracking-widest">Fresh Acquisitions</span>
-                <h2 className="text-3xl font-serif font-bold text-dark mt-1">Latest From The Vault</h2>
-              </div>
-              <button
-                onClick={() => onNavigate?.('shop')}
-                className="text-xs font-semibold text-accent hover:underline flex items-center space-x-1"
-              >
-                <span>View Full Catalog</span>
-                <span>&rarr;</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-              {newArrivals.map((p) => {
-                const isAdding = addingId === p.id;
-                const price = parseFloat(p.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 });
-                return (
-                  <div
-                    key={p.id}
-                    className="group bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col"
-                  >
-                    <div className="relative aspect-square overflow-hidden bg-gray-100">
-                      <img
-                        src={p.primary_image || 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=800'}
-                        alt={p.title}
-                        className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                      />
-                      <div className="absolute top-3 left-3 bg-dark/80 backdrop-blur-sm text-white px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wider">
-                        New
-                      </div>
-                    </div>
-
-                    <div className="p-5 flex flex-col flex-1 justify-between">
-                      <div>
-                        <p className="text-[11px] font-medium text-accent uppercase tracking-wider truncate">
-                          {p.brand_name || p.vendor_display_name || 'Atelier'}
-                        </p>
-                        <h3 className="text-sm font-serif font-bold text-dark mt-1 line-clamp-2 leading-snug group-hover:text-accent transition-colors">
-                          {p.title}
-                        </h3>
-                      </div>
-
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex items-baseline justify-between mb-3">
-                          <span className="text-lg font-serif font-bold text-dark">${price}</span>
-                          <span className="text-[11px] text-gray-500 font-medium">Vault Ready</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleAddToCart(e, p)}
-                          disabled={isAdding}
-                          className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
-                            isAdding
-                              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                              : 'bg-dark hover:bg-accent text-white shadow-md active:scale-95'
-                          }`}
-                        >
-                          <Icon name="cart" className="w-4 h-4" />
-                          <span>{isAdding ? 'Adding to Bag...' : 'Add to Bag'}</span>
-                        </button>
-                      </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {newArrivals.map((product) => {
+              const isAdding = addingId === product.id;
+              return (
+                <div
+                  key={product.id}
+                  className="group bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden flex flex-col hover:shadow-lg transition-all"
+                >
+                  <div className="relative aspect-[4/5] bg-stone-100 overflow-hidden">
+                    <img
+                      src={product.primary_image || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=600'}
+                      alt={product.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                    <div className="absolute top-3 left-3">
+                      <span className="bg-stone-900/80 text-white text-[10px] font-medium px-2 py-0.5 rounded-md">
+                        {product.vendor_display_name}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+
+                  <div className="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      {product.brand_name && (
+                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider mb-0.5">
+                          {product.brand_name}
+                        </p>
+                      )}
+                      <h3 className="text-xs font-serif font-bold text-stone-900 line-clamp-1">
+                        {product.title}
+                      </h3>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between">
+                      <span className="text-sm font-bold text-stone-900">
+                        ${parseFloat(product.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCart(product)}
+                        disabled={isAdding}
+                        className="px-2.5 py-1 bg-stone-900 hover:bg-amber-900 text-white text-[11px] font-medium rounded-md transition-colors"
+                      >
+                        {isAdding ? '...' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       </main>

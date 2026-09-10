@@ -886,12 +886,12 @@ export interface ProductListItem {
   vendor_display_name: string;
   category_name: string;
   brand_name?: string | null;
+  primary_variant_id?: string | null;
   rating_avg: string;
   rating_count: number;
   status: ProductStatus;
   is_active: boolean;
   created_at: string;
-  default_variant_id?: string | null;
 }
 
 export interface ProductAttributeValue {
