@@ -244,9 +244,10 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
       });
 
       // If Stripe was selected, initiate and confirm sandbox payment intent
-      if (checkoutForm.payment_method === 'stripe' && res?.order_id) {
+      const targetOrderId = (res as any)?.order_id || (res as any)?.id;
+      if (checkoutForm.payment_method === 'stripe' && targetOrderId) {
         try {
-          const intent = await API.Payment.createStripeIntent({ order_id: res.order_id });
+          const intent = await API.Payment.createStripeIntent({ order_id: targetOrderId });
           const piId = intent?.stripe_payment_intent_id || (intent as any)?.payment_intent_id;
           if (piId) {
             await API.Payment.confirmStripePayment({ payment_intent_id: piId });

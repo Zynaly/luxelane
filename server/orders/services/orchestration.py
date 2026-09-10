@@ -287,46 +287,54 @@ def place_order(
             cart.status = "converted"
             cart.save(update_fields=["status", "updated_at"])
 
-            # 8. Payment Processing Execution (FakeGateway / Provider)
-            gateway = FakeGateway()
-            charge_result = gateway.charge(
-                amount=int(grand_total * 100),
-                currency="USD",
-                payment_method_id="fake_card",
-                order_id=order.order_number,
-            )
+            # 8. Payment Processing Execution (FakeGateway / Provider / Stripe)
+            is_online_payment = str(payment_method).lower() in ("stripe", "online", "card")
+            inv_number = None
 
-            if not charge_result.success:
-                raise ValidationError({"payment": f"Payment authorization failed: {charge_result.error_message}"})
+            if is_online_payment:
+                # Online payment (Stripe) requires client-side authorization / confirmation.
+                # Order remains in PENDING_PAYMENT; holds remain active until confirmation commits them.
+                pass
+            else:
+                gateway = FakeGateway()
+                charge_result = gateway.charge(
+                    amount=int(grand_total * 100),
+                    currency="USD",
+                    payment_method_id="fake_card",
+                    order_id=order.order_number,
+                )
 
-            # 9. Commit on Payment Success
-            order.status = OrderStatus.CONFIRMED
-            order.save(update_fields=["status", "updated_at"])
+                if not charge_result.success:
+                    raise ValidationError({"payment": f"Payment authorization failed: {charge_result.error_message}"})
 
-            for vo in order.vendor_orders.all():
-                vo.status = VendorOrderStatus.CONFIRMED
-                vo.save(update_fields=["status", "updated_at"])
+                # 9. Commit on Payment Success
+                order.status = OrderStatus.CONFIRMED
+                order.save(update_fields=["status", "updated_at"])
 
-            # Transition reservations to COMMITTED
-            for res in created_reservations:
-                reservation_service.commit(res)
+                for vo in order.vendor_orders.all():
+                    vo.status = VendorOrderStatus.CONFIRMED
+                    vo.save(update_fields=["status", "updated_at"])
 
-            # Audit status history transition
-            OrderStatusHistory.objects.create(
-                order=order,
-                from_status=OrderStatus.PENDING_PAYMENT,
-                to_status=OrderStatus.CONFIRMED,
-                changed_by=auth_user,
-                note=f"Payment succeeded ({charge_result.gateway_transaction_id}). Order confirmed.",
-            )
+                # Transition reservations to COMMITTED
+                for res in created_reservations:
+                    reservation_service.commit(res)
 
-            # Generate Invoice
-            inv_number = Invoice.generate_invoice_number(order.order_number)
-            Invoice.objects.create(
-                order=order,
-                invoice_number=inv_number,
-                pdf_url=f"/api/v1/orders/{order.id}/invoice/pdf/",
-            )
+                # Audit status history transition
+                OrderStatusHistory.objects.create(
+                    order=order,
+                    from_status=OrderStatus.PENDING_PAYMENT,
+                    to_status=OrderStatus.CONFIRMED,
+                    changed_by=auth_user,
+                    note=f"Payment succeeded ({charge_result.gateway_transaction_id}). Order confirmed.",
+                )
+
+                # Generate Invoice
+                inv_number = Invoice.generate_invoice_number(order.order_number)
+                Invoice.objects.create(
+                    order=order,
+                    invoice_number=inv_number,
+                    pdf_url=f"/api/v1/orders/{order.id}/invoice/pdf/",
+                )
 
             # Emit OutboxEvent for asynchronous downstream integrations
             OutboxEvent.objects.create(
@@ -352,6 +360,7 @@ def place_order(
     # 10. Build Response Snapshot
     response_data = {
         "id": str(order.id),
+        "order_id": str(order.id),
         "order_number": order.order_number,
         "status": order.status,
         "grand_total": str(order.grand_total),

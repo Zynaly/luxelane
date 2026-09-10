@@ -131,7 +131,12 @@ export const AuthAPI = {
     });
   },
 
-  login: async (credentials: { email_or_phone: string; password: string }) => {
+  login: async (credentials: { email_or_phone?: string; email?: string; password: string }) => {
+    const payload = {
+      email_or_phone: credentials.email_or_phone || credentials.email || '',
+      email: credentials.email || credentials.email_or_phone || '',
+      password: credentials.password,
+    };
     const res = await apiRequest<{
       access: string;
       refresh: string;
@@ -148,7 +153,7 @@ export const AuthAPI = {
       };
     }>('/auth/login/', {
       method: 'POST',
-      body: JSON.stringify(credentials),
+      body: JSON.stringify(payload),
     });
 
     if (res.access) {
