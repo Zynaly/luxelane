@@ -22,8 +22,22 @@ LOGGING = {
     },
 }
 
-# Relax CORS in dev
+# Relax CORS & CSRF in dev
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:\d+$",
+    r"^http://127\.0\.0\.1:\d+$",
+]
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # If EMAIL_HOST_USER is not configured in dev, fallback to console
 if not EMAIL_HOST_USER:

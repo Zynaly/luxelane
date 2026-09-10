@@ -194,12 +194,58 @@ SPECTACULAR_SETTINGS = {
     "CONTACT": {"name": "LuxeLane Engineering"},
 }
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# ── CORS & Security ───────────────────────────────────────────────────────────
+from corsheaders.defaults import default_headers, default_methods
+
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:5173", "http://localhost:3000"],
+    default=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
 )
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-session-key",
+    "idempotency-key",
+    "x-idempotency-key",
+    "cache-control",
+    "pragma",
+    "origin",
+    "accept-encoding",
+    "dnt",
+    "x-forwarded-for",
+    "x-forwarded-proto",
+]
+CORS_ALLOW_METHODS = list(default_methods) + [
+    "OPTIONS",
+]
+CORS_EXPOSE_HEADERS = [
+    "Content-Type",
+    "X-CSRFToken",
+    "Idempotency-Key",
+    "X-Idempotency-Key",
+    "X-Session-Key",
+]
+
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+)
+
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 # ── Static / Media ───────────────────────────────────────────────────────────
 STATIC_URL = "/static/"
