@@ -121,6 +121,7 @@ class Inventory(BaseModel):
     reorder_threshold = models.PositiveIntegerField(default=10)
 
     class Meta(BaseModel.Meta):
+        verbose_name_plural = "Inventories"
         unique_together = [("warehouse", "variant")]
         ordering = ["warehouse", "variant"]
         indexes = [

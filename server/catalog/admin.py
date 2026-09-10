@@ -3,7 +3,8 @@ from django.contrib import admin
 from mptt.admin import MPTTModelAdmin
 
 from catalog.models import (
-    Category, Brand, Product, ProductImage, ProductTag, BulkImportJob,
+    Category, Brand, Product, ProductVariant, ProductVariantAttribute,
+    ProductImage, ProductTag, BulkImportJob,
     Review, ReviewMedia, ReviewReply, ProductQuestion, ProductAnswer
 )
 
@@ -24,6 +25,12 @@ class BrandAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
+class ProductVariantInline(admin.TabularInline):
+    model = ProductVariant
+    extra = 0
+    fields = ["sku", "price", "compare_at_price", "weight_kg", "is_active"]
+
+
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 0
@@ -42,7 +49,14 @@ class ProductAdmin(admin.ModelAdmin):
     list_filter = ["status", "is_active", "category"]
     search_fields = ["title", "slug", "vendor__display_name"]
     readonly_fields = ["slug", "search_vector", "rating_avg", "rating_count", "created_at", "updated_at"]
-    inlines = [ProductImageInline, ProductTagInline]
+    inlines = [ProductVariantInline, ProductImageInline, ProductTagInline]
+
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ["sku", "product", "price", "compare_at_price", "weight_kg", "is_active", "created_at"]
+    list_filter = ["is_active", "created_at"]
+    search_fields = ["sku", "barcode", "product__title"]
 
 
 @admin.register(BulkImportJob)
