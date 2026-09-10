@@ -721,12 +721,12 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                       Atelier Packages ({selectedOrder.vendor_orders?.length || 0})
                     </h3>
 
-                    {selectedOrder.vendor_orders?.map((vo) => (
+                    {selectedOrder.vendor_orders?.map((vo, idx) => (
                       <div key={vo.id} className="border border-stone-200 rounded-xl overflow-hidden shadow-sm">
                         <div className="bg-stone-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
                           <div>
                             <span className="font-bold text-stone-900">{vo.vendor_name || 'Partner Atelier'}</span>
-                            <span className="text-stone-500 ml-2 font-mono text-[11px]">{vo.id.substring(0, 8)}...</span>
+                            <span className="text-stone-500 ml-2 font-medium text-[11px]">· Package #{idx + 1}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <span className="px-2 py-0.5 rounded bg-white font-medium text-stone-700 border border-stone-300">
@@ -766,7 +766,7 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                   {/* Action row */}
                   <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
                     <span className="text-xs text-gray-500">
-                      Receipt & Outbox event registered in LuxeLane backend ledger.
+                      Official invoice and certificate of authenticity verified.
                     </span>
                     {['pending_payment', 'paid', 'processing'].includes(selectedOrder.status) && (
                       <button

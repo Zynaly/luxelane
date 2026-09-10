@@ -25,8 +25,9 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
   const [destCountry, setDestCountry] = useState('US');
   const [destPostalCode, setDestPostalCode] = useState('10001');
 
-  // Sprint 10: Checkout & Order Placement State
+  // Checkout & Order Placement State
   const [checkoutStep, setCheckoutStep] = useState<'form' | 'processing' | 'confirmed'>('form');
+  const [checkoutStage, setCheckoutStage] = useState<1 | 2>(1);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [placedOrder, setPlacedOrder] = useState<any | null>(null);
   const [checkoutForm, setCheckoutForm] = useState({
@@ -205,6 +206,31 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
       // Guest fallback
     }
   }, []);
+
+  const handleContinueToPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!checkoutForm.email || !checkoutForm.email.includes('@')) {
+      setOrderError('Please provide a valid email address for order receipts and delivery tracking.');
+      return;
+    }
+    if (!checkoutForm.line1?.trim()) {
+      setOrderError('Street address is required.');
+      return;
+    }
+    if (!checkoutForm.city?.trim()) {
+      setOrderError('City is required.');
+      return;
+    }
+    if (!checkoutForm.postal_code?.trim()) {
+      setOrderError('Postal / ZIP code is required.');
+      return;
+    }
+    setOrderError(null);
+    if (cart?.id) {
+      fetchShippingRates(cart.id, checkoutForm.country, checkoutForm.postal_code);
+    }
+    setCheckoutStage(2);
+  };
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -787,7 +813,12 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                   </div>
 
                   <button
-                    onClick={() => setCheckoutModalOpen(true)}
+                    onClick={() => {
+                      setCheckoutStage(1);
+                      setOrderError(null);
+                      setCheckoutStep('form');
+                      setCheckoutModalOpen(true);
+                    }}
                     disabled={hasIssues || items.length === 0}
                     className="w-full py-4 px-6 rounded-xl bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white text-sm font-semibold uppercase tracking-wider shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2"
                   >
@@ -905,17 +936,77 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                 </div>
               )}
 
-              {/* State 3: Checkout Form */}
+              {/* State 3: Multi-Step Checkout Form */}
               {checkoutStep === 'form' && (
                 <div>
-                  <div className="mb-6">
-                    <span className="text-xs font-mono uppercase tracking-widest text-amber-700 font-semibold">Sprint 10 Orchestration</span>
-                    <h3 className="text-2xl font-serif font-bold text-stone-900 mt-1">
-                      White-Glove Atelier Checkout
-                    </h3>
-                    <p className="text-stone-500 text-xs mt-1">
-                      Complete your delivery coordinates and authorize payment to reserve your curated pieces.
-                    </p>
+                  {/* Stepper Progress Bar */}
+                  <div className="mb-6 pb-5 border-b border-stone-200">
+                    <div className="flex items-center justify-between mb-4">
+                      {/* Step 1 Pill */}
+                      <button
+                        type="button"
+                        onClick={() => setCheckoutStage(1)}
+                        className={`flex items-center space-x-2.5 text-left transition-all ${
+                          checkoutStage === 1 ? 'text-stone-900' : 'text-stone-500 hover:text-stone-800'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                            checkoutStage === 1
+                              ? 'bg-stone-900 text-white ring-4 ring-stone-100'
+                              : 'bg-emerald-600 text-white shadow-sm'
+                          }`}
+                        >
+                          {checkoutStage > 1 ? <Icon name="check" className="w-3.5 h-3.5" /> : '1'}
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Step 1</p>
+                          <p className="text-xs font-semibold">Contact & Destination</p>
+                        </div>
+                      </button>
+
+                      {/* Divider */}
+                      <div
+                        className={`h-0.5 flex-1 mx-4 transition-colors ${
+                          checkoutStage > 1 ? 'bg-emerald-600' : 'bg-stone-200'
+                        }`}
+                      />
+
+                      {/* Step 2 Pill */}
+                      <div
+                        className={`flex items-center space-x-2.5 ${
+                          checkoutStage === 2 ? 'text-stone-900' : 'text-stone-400'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                            checkoutStage === 2
+                              ? 'bg-stone-900 text-white ring-4 ring-stone-100'
+                              : 'bg-stone-100 text-stone-400 border border-stone-300'
+                          }`}
+                        >
+                          2
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-bold tracking-widest text-stone-400">Step 2</p>
+                          <p className="text-xs font-semibold">Delivery & Payment</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs uppercase tracking-widest text-amber-700 font-semibold font-serif">
+                          {checkoutStage === 1 ? 'White-Glove Delivery Coordinates' : 'Courier Selection & Settlement'}
+                        </span>
+                        <h3 className="text-2xl font-serif font-bold text-stone-900 mt-0.5">
+                          {checkoutStage === 1 ? 'Client Contact & Destination' : 'Delivery Method & Payment'}
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-medium text-stone-400 bg-stone-100 px-2.5 py-1 rounded-full border border-stone-200">
+                        {checkoutStage === 1 ? 'Step 1 of 2' : 'Step 2 of 2'}
+                      </span>
+                    </div>
                   </div>
 
                   {orderError && (
@@ -925,313 +1016,373 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
                     </div>
                   )}
 
-                  <form onSubmit={handlePlaceOrder} className="space-y-5">
-                    {/* Contact details */}
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5">
-                        1. Client Contact Information
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] text-stone-500 mb-1">Email Address (for order receipts) *</label>
-                          <input
-                            type="email"
-                            required
-                            value={checkoutForm.email}
-                            onChange={(e) => setCheckoutForm({ ...checkoutForm, email: e.target.value })}
-                            placeholder="patron@luxelane.com"
-                            className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] text-stone-500 mb-1">Contact Phone</label>
-                          <input
-                            type="tel"
-                            value={checkoutForm.phone}
-                            onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                            placeholder="+1 (555) 019-2831"
-                            className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Delivery Address */}
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5">
-                        2. Destination Coordinates
-                      </h4>
-                      <div className="space-y-2.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="sm:col-span-2">
-                            <label className="block text-[11px] text-stone-500 mb-1">Street Address *</label>
-                            <input
-                              type="text"
-                              required
-                              value={checkoutForm.line1}
-                              onChange={(e) => setCheckoutForm({ ...checkoutForm, line1: e.target.value })}
-                              placeholder="740 Park Avenue"
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-stone-500 mb-1">Apt / Suite</label>
-                            <input
-                              type="text"
-                              value={checkoutForm.line2}
-                              onChange={(e) => setCheckoutForm({ ...checkoutForm, line2: e.target.value })}
-                              placeholder="Penthouse B"
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-[11px] text-stone-500 mb-1">City *</label>
-                            <input
-                              type="text"
-                              required
-                              value={checkoutForm.city}
-                              onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-stone-500 mb-1">State / Province</label>
-                            <input
-                              type="text"
-                              value={checkoutForm.state}
-                              onChange={(e) => setCheckoutForm({ ...checkoutForm, state: e.target.value })}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-stone-500 mb-1">Postal / ZIP Code *</label>
-                            <input
-                              type="text"
-                              required
-                              value={checkoutForm.postal_code}
-                              onChange={(e) => setCheckoutForm({ ...checkoutForm, postal_code: e.target.value })}
-                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Delivery Quote Selector */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
-                          3. Delivery Logistics
+                  {/* ────────────────────────────────────────────────────────── */}
+                  {/* STEP 1: CLIENT CONTACT & DESTINATION COORDINATES         */}
+                  {/* ────────────────────────────────────────────────────────── */}
+                  {checkoutStage === 1 && (
+                    <form onSubmit={handleContinueToPayment} className="space-y-5">
+                      {/* Contact details */}
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5 flex items-center justify-between">
+                          <span>1. Client Contact Information</span>
+                          <span className="text-[10px] text-stone-400 normal-case font-normal">For order tracking & receipts</span>
                         </h4>
-                        <span className="text-[10px] text-stone-400">Only enabled methods can be selected</span>
-                      </div>
-                      {shippingRates.length > 0 ? (
-                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                          {shippingRates.map((q) => {
-                            const isComingSoon = q.is_enabled === false || q.status === 'coming_soon';
-                            const isSelected = selectedShippingQuote?.quote_id === q.quote_id;
-
-                            return (
-                              <label
-                                key={q.quote_id}
-                                className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-colors ${
-                                  isComingSoon
-                                    ? 'border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed'
-                                    : isSelected
-                                    ? 'border-stone-900 bg-stone-50 font-medium cursor-pointer ring-1 ring-stone-900'
-                                    : 'border-stone-200 hover:border-stone-300 cursor-pointer bg-white'
-                                }`}
-                              >
-                                <div className="flex items-center space-x-2.5">
-                                  <input
-                                    type="radio"
-                                    name="shippingQuoteRadio"
-                                    disabled={isComingSoon}
-                                    checked={isSelected}
-                                    onChange={() => !isComingSoon && setSelectedShippingQuote(q)}
-                                    className="text-stone-900 focus:ring-stone-900 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                                  />
-                                  <div>
-                                    <div className="flex items-center space-x-2">
-                                      <span className={`font-semibold ${isComingSoon ? 'text-stone-500' : 'text-stone-900'}`}>
-                                        {q.carrier_name}
-                                      </span>
-                                      {isComingSoon ? (
-                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 border border-amber-300">
-                                          Coming Soon
-                                        </span>
-                                      ) : (
-                                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                          Enabled
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-stone-500 text-[11px] block mt-0.5">
-                                      {q.service_level}
-                                      {isComingSoon && ' — Courier integration in progress'}
-                                    </span>
-                                    <span className="block text-[10px] text-stone-400 font-mono mt-0.5">
-                                      {isComingSoon
-                                        ? 'Temporarily unavailable for direct dispatch'
-                                        : `${q.quote_id} · ~${q.estimated_days} business days direct from atelier`}
-                                    </span>
-                                  </div>
-                                </div>
-                                <span className={`font-mono font-bold ${isComingSoon ? 'text-stone-400 text-[11px]' : 'text-stone-900 text-sm'}`}>
-                                  {isComingSoon ? '—' : `$${parseFloat(q.amount).toFixed(2)}`}
-                                </span>
-                              </label>
-                            );
-                          })}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">Email Address *</label>
+                            <input
+                              type="email"
+                              required
+                              value={checkoutForm.email}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, email: e.target.value })}
+                              placeholder="patron@luxelane.com"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-stone-500 mb-1">Contact Phone</label>
+                            <input
+                              type="tel"
+                              value={checkoutForm.phone}
+                              onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
+                              placeholder="+1 (555) 019-2831"
+                              className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                            />
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-xs text-stone-500 italic">Calculating available delivery quotes...</p>
-                      )}
-                    </div>
+                      </div>
 
-                    {/* Payment Method Selector */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
-                          4. Payment Method
+                      {/* Delivery Address */}
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800 mb-2.5">
+                          2. Destination Coordinates
                         </h4>
-                        <span className="text-[10px] text-stone-400 font-mono">Sandbox Environment</span>
-                      </div>
-                      <div className="space-y-2">
-                        {/* 1. Stripe (Working Sandbox Credentials) */}
-                        <label
-                          className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                            checkoutForm.payment_method === 'stripe'
-                              ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900'
-                              : 'border-stone-200 hover:border-stone-300 bg-white'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <input
-                              type="radio"
-                              name="paymentMethodRadio"
-                              checked={checkoutForm.payment_method === 'stripe'}
-                              onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'stripe' })}
-                              className="text-stone-900 focus:ring-stone-900"
-                            />
-                            <div className="w-8 h-6 rounded bg-indigo-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
-                              STRIPE
+                        <div className="space-y-2.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[11px] text-stone-500 mb-1">Street Address *</label>
+                              <input
+                                type="text"
+                                required
+                                value={checkoutForm.line1}
+                                onChange={(e) => setCheckoutForm({ ...checkoutForm, line1: e.target.value })}
+                                placeholder="740 Park Avenue"
+                                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                              />
                             </div>
                             <div>
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-stone-900">Credit / Debit Card (Stripe)</span>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                  Sandbox Active
-                                </span>
-                              </div>
-                              <span className="block text-[10px] text-stone-500 mt-0.5">
-                                Verified Test Card: •••• •••• •••• 4242 · Exp 12/28 · CVC 123
-                              </span>
+                              <label className="block text-[11px] text-stone-500 mb-1">Apt / Suite</label>
+                              <input
+                                type="text"
+                                value={checkoutForm.line2}
+                                onChange={(e) => setCheckoutForm({ ...checkoutForm, line2: e.target.value })}
+                                placeholder="Suite 12B"
+                                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                              />
                             </div>
                           </div>
-                          <span className="text-[11px] font-mono text-emerald-700 font-semibold">Live Sandbox</span>
-                        </label>
 
-                        {/* 2. JazzCash (Disabled / Coming Soon) */}
-                        <label
-                          className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed text-xs"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <input
-                              type="radio"
-                              name="paymentMethodRadio"
-                              disabled
-                              checked={false}
-                              className="text-stone-400 focus:ring-stone-400 opacity-40 cursor-not-allowed"
-                            />
-                            <div className="w-8 h-6 rounded bg-amber-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
-                              JC
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[11px] text-stone-500 mb-1">City *</label>
+                              <input
+                                type="text"
+                                required
+                                value={checkoutForm.city}
+                                onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
+                                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                              />
                             </div>
                             <div>
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-stone-500">JazzCash</span>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
-                                  Coming Soon
-                                </span>
-                              </div>
-                              <span className="block text-[10px] text-stone-400 mt-0.5">
-                                Mobile Account & Voucher checkout arriving soon
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[10px] text-amber-700 font-medium">Coming Soon</span>
-                        </label>
-
-                        {/* 3. Cash on Delivery (COD) (Enabled) */}
-                        <label
-                          className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
-                            checkoutForm.payment_method === 'cod'
-                              ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900'
-                              : 'border-stone-200 hover:border-stone-300 bg-white'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <input
-                              type="radio"
-                              name="paymentMethodRadio"
-                              checked={checkoutForm.payment_method === 'cod'}
-                              onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'cod' })}
-                              className="text-stone-900 focus:ring-stone-900"
-                            />
-                            <div className="w-8 h-6 rounded bg-stone-800 text-amber-300 flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
-                              COD
+                              <label className="block text-[11px] text-stone-500 mb-1">State / Province</label>
+                              <input
+                                type="text"
+                                value={checkoutForm.state}
+                                onChange={(e) => setCheckoutForm({ ...checkoutForm, state: e.target.value })}
+                                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                              />
                             </div>
                             <div>
-                              <div className="flex items-center space-x-2">
-                                <span className="font-semibold text-stone-900">Cash on Delivery</span>
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
-                                  Available
-                                </span>
-                              </div>
-                              <span className="block text-[10px] text-stone-500 mt-0.5">
-                                Pay cash upon parcel delivery with OTP verification
-                              </span>
+                              <label className="block text-[11px] text-stone-500 mb-1">Postal / ZIP Code *</label>
+                              <input
+                                type="text"
+                                required
+                                value={checkoutForm.postal_code}
+                                onChange={(e) => setCheckoutForm({ ...checkoutForm, postal_code: e.target.value })}
+                                className="w-full px-3 py-2 text-xs rounded-lg border border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                              />
                             </div>
                           </div>
-                          <span className="text-[11px] font-mono text-stone-600 font-medium">OTP Handover</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Order Total & Submit */}
-                    <div className="pt-3 border-t border-stone-200">
-                      <div className="flex justify-between items-baseline mb-4">
-                        <span className="text-sm font-semibold text-stone-900">Grand Total Due</span>
-                        <div className="text-right">
-                          <span className="text-xl font-serif font-bold text-stone-900 font-mono">
-                            ${dynamicGrandTotal}
-                          </span>
-                          <span className="text-[10px] text-stone-400 block">Taxes, shipping, and packaging included</span>
                         </div>
                       </div>
 
-                      <div className="flex space-x-3">
+                      {/* Step 1 Navigation Action */}
+                      <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
                         <button
                           type="button"
                           onClick={() => setCheckoutModalOpen(false)}
-                          className="flex-1 py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors"
+                          className="py-3 px-5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
-                          disabled={!selectedShippingQuote || items.length === 0}
-                          className="flex-[2] py-3 px-6 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shadow-md flex items-center justify-center space-x-2"
+                          className="py-3 px-7 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shadow-md flex items-center space-x-2"
                         >
-                          <span>Authorize & Place Order (${dynamicGrandTotal})</span>
-                          <Icon name="check" className="w-4 h-4 text-emerald-400" />
+                          <span>Proceed to Delivery & Payment</span>
+                          <Icon name="chevron-down" className="w-4 h-4 transform -rotate-90" />
                         </button>
                       </div>
-                    </div>
-                  </form>
+                    </form>
+                  )}
+
+                  {/* ────────────────────────────────────────────────────────── */}
+                  {/* STEP 2: DELIVERY LOGISTICS & PAYMENT AUTHORIZATION        */}
+                  {/* ────────────────────────────────────────────────────────── */}
+                  {checkoutStage === 2 && (
+                    <form onSubmit={handlePlaceOrder} className="space-y-5">
+                      {/* Destination Summary Pill */}
+                      <div className="bg-stone-50 border border-stone-200 rounded-xl p-3.5 flex items-center justify-between text-xs">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-stone-400 font-bold block">
+                            Shipping Destination
+                          </span>
+                          <p className="text-stone-800 font-medium mt-0.5">
+                            {checkoutForm.line1}{checkoutForm.line2 ? `, ${checkoutForm.line2}` : ''}, {checkoutForm.city}, {checkoutForm.state} {checkoutForm.postal_code}
+                          </p>
+                          <p className="text-stone-500 text-[11px] mt-0.5">
+                            Receipt Recipient: {checkoutForm.email} {checkoutForm.phone && `· ${checkoutForm.phone}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOrderError(null);
+                            setCheckoutStage(1);
+                          }}
+                          className="px-3 py-1.5 bg-white border border-stone-300 hover:border-stone-400 rounded-lg text-[11px] font-semibold text-stone-700 hover:text-stone-900 transition-colors shadow-sm"
+                        >
+                          Edit Details
+                        </button>
+                      </div>
+
+                      {/* Delivery Logistics */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
+                            1. Delivery Logistics
+                          </h4>
+                          <span className="text-[10px] text-stone-400">Only enabled methods can be selected</span>
+                        </div>
+                        {shippingRates.length > 0 ? (
+                          <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                            {shippingRates.map((q) => {
+                              const isComingSoon = q.is_enabled === false || q.status === 'coming_soon';
+                              const isSelected = selectedShippingQuote?.quote_id === q.quote_id;
+
+                              return (
+                                <label
+                                  key={q.quote_id}
+                                  className={`flex items-center justify-between p-3.5 rounded-xl border text-xs transition-all ${
+                                    isComingSoon
+                                      ? 'border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed'
+                                      : isSelected
+                                      ? 'border-stone-900 bg-stone-50 font-medium cursor-pointer ring-1 ring-stone-900 shadow-sm'
+                                      : 'border-stone-200 hover:border-stone-300 cursor-pointer bg-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <input
+                                      type="radio"
+                                      name="shippingQuoteRadio"
+                                      disabled={isComingSoon}
+                                      checked={isSelected}
+                                      onChange={() => !isComingSoon && setSelectedShippingQuote(q)}
+                                      className="text-stone-900 focus:ring-stone-900 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                    />
+                                    <div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className={`font-semibold ${isComingSoon ? 'text-stone-500' : 'text-stone-900'}`}>
+                                          {q.carrier_name}
+                                        </span>
+                                        {isComingSoon ? (
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-amber-100 text-amber-800 border border-amber-300">
+                                            Coming Soon
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                            Enabled
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-stone-500 text-[11px] block mt-0.5">
+                                        {q.service_level.replace(/_/g, ' ')}
+                                        {isComingSoon && ' — Courier integration in progress'}
+                                      </span>
+                                      <span className="block text-[10px] text-stone-400 mt-0.5">
+                                        {isComingSoon
+                                          ? 'Temporarily unavailable for direct dispatch'
+                                          : `Direct atelier courier dispatch · ~${q.estimated_days} business days`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <span className={`font-mono font-bold ${isComingSoon ? 'text-stone-400 text-[11px]' : 'text-stone-900 text-sm'}`}>
+                                    {isComingSoon ? '—' : `$${parseFloat(q.amount).toFixed(2)}`}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-stone-500 italic py-2">Calculating available delivery quotes...</p>
+                        )}
+                      </div>
+
+                      {/* Payment Method Selector */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-800">
+                            2. Payment Method
+                          </h4>
+                          <span className="text-[10px] text-emerald-700 font-medium">Verified Sandbox Active</span>
+                        </div>
+                        <div className="space-y-2">
+                          {/* 1. Stripe (Working Sandbox Credentials) */}
+                          <label
+                            className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                              checkoutForm.payment_method === 'stripe'
+                                ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900 shadow-sm'
+                                : 'border-stone-200 hover:border-stone-300 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="radio"
+                                name="paymentMethodRadio"
+                                checked={checkoutForm.payment_method === 'stripe'}
+                                onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'stripe' })}
+                                className="text-stone-900 focus:ring-stone-900"
+                              />
+                              <div className="w-8 h-6 rounded bg-indigo-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                                STRIPE
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-semibold text-stone-900">Credit / Debit Card (Stripe)</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    Sandbox Active
+                                  </span>
+                                </div>
+                                <span className="block text-[10px] text-stone-500 mt-0.5">
+                                  Verified Test Card: •••• •••• •••• 4242 · Exp 12/28 · CVC 123
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-mono text-emerald-700 font-semibold">Live Sandbox</span>
+                          </label>
+
+                          {/* 2. JazzCash (Disabled / Coming Soon) */}
+                          <label
+                            className="flex items-center justify-between p-3 rounded-xl border border-stone-200 bg-stone-100/60 opacity-60 cursor-not-allowed text-xs"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="radio"
+                                name="paymentMethodRadio"
+                                disabled
+                                checked={false}
+                                className="text-stone-400 focus:ring-stone-400 opacity-40 cursor-not-allowed"
+                              />
+                              <div className="w-8 h-6 rounded bg-amber-600 text-white flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                                JC
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-semibold text-stone-500">JazzCash</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                                    Coming Soon
+                                  </span>
+                                </div>
+                                <span className="block text-[10px] text-stone-400 mt-0.5">
+                                  Mobile Account & Voucher checkout arriving soon
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[10px] text-amber-700 font-medium">Coming Soon</span>
+                          </label>
+
+                          {/* 3. Cash on Delivery (COD) (Enabled) */}
+                          <label
+                            className={`flex items-center justify-between p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                              checkoutForm.payment_method === 'cod'
+                                ? 'border-stone-900 bg-stone-50 ring-1 ring-stone-900 shadow-sm'
+                                : 'border-stone-200 hover:border-stone-300 bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="radio"
+                                name="paymentMethodRadio"
+                                checked={checkoutForm.payment_method === 'cod'}
+                                onChange={() => setCheckoutForm({ ...checkoutForm, payment_method: 'cod' })}
+                                className="text-stone-900 focus:ring-stone-900"
+                              />
+                              <div className="w-8 h-6 rounded bg-stone-800 text-amber-300 flex items-center justify-center text-[8px] font-mono font-black tracking-widest">
+                                COD
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-semibold text-stone-900">Cash on Delivery</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-stone-100 text-stone-700 border border-stone-200">
+                                    Available
+                                  </span>
+                                </div>
+                                <span className="block text-[10px] text-stone-500 mt-0.5">
+                                  Pay cash upon parcel delivery with OTP verification
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-mono text-stone-600 font-medium">OTP Handover</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Order Total & Submit */}
+                      <div className="pt-3 border-t border-stone-200">
+                        <div className="flex justify-between items-baseline mb-4">
+                          <span className="text-sm font-semibold text-stone-900">Grand Total Due</span>
+                          <div className="text-right">
+                            <span className="text-xl font-serif font-bold text-stone-900 font-mono">
+                              ${dynamicGrandTotal}
+                            </span>
+                            <span className="text-[10px] text-stone-400 block">Taxes, shipping, and packaging included</span>
+                          </div>
+                        </div>
+
+                        <div className="flex space-x-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOrderError(null);
+                              setCheckoutStage(1);
+                            }}
+                            className="flex-1 py-3 px-4 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-semibold uppercase tracking-wider transition-colors flex items-center justify-center space-x-1"
+                          >
+                            <Icon name="chevron-down" className="w-4 h-4 transform rotate-90" />
+                            <span>Back to Address</span>
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={!selectedShippingQuote || items.length === 0}
+                            className="flex-[2] py-3 px-6 bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white rounded-xl text-xs font-semibold uppercase tracking-wider transition-all shadow-md flex items-center justify-center space-x-2"
+                          >
+                            <span>Authorize & Place Order (${dynamicGrandTotal})</span>
+                            <Icon name="check" className="w-4 h-4 text-emerald-400" />
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+                  )}
                 </div>
               )}
             </div>
