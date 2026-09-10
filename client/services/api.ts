@@ -891,6 +891,7 @@ export interface ProductListItem {
   status: ProductStatus;
   is_active: boolean;
   created_at: string;
+  default_variant_id?: string | null;
 }
 
 export interface ProductAttributeValue {

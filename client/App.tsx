@@ -237,13 +237,13 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const renderPage = () => {
     switch (page) {
-      case 'home': return <HomePage onNavigate={setPage} />;
-      case 'shop': return <ShopPage />;
+      case 'home': return <HomePage onNavigate={setPage} onCartChange={setCartCount} />;
+      case 'shop': return <ShopPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'about': return <AboutUsPage />;
       case 'contact': return <ContactPage onOpenChat={() => setIsChatOpen(true)} />;
       case 'cart': return <CartPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'account': return <AccountPage onLogout={onLogout} />;
-      default: return <HomePage onNavigate={setPage} />;
+      default: return <HomePage onNavigate={setPage} onCartChange={setCartCount} />;
     }
   };
 

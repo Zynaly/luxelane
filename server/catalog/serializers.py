@@ -260,6 +260,7 @@ class ProductListSerializer(serializers.ModelSerializer):
     vendor_display_name = serializers.CharField(source="vendor.display_name", read_only=True)
     category_name       = serializers.CharField(source="category.name", read_only=True)
     brand_name          = serializers.SerializerMethodField()
+    default_variant_id  = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -267,6 +268,7 @@ class ProductListSerializer(serializers.ModelSerializer):
             "id", "title", "slug", "base_price",
             "primary_image", "vendor_display_name", "category_name", "brand_name",
             "rating_avg", "rating_count", "status", "is_active", "created_at",
+            "default_variant_id",
         ]
 
     def get_primary_image(self, obj):
@@ -277,6 +279,10 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     def get_brand_name(self, obj):
         return obj.brand.name if obj.brand else None
+
+    def get_default_variant_id(self, obj):
+        v = obj.variants.filter(is_active=True).first()
+        return str(v.id) if v else None
 
 
 # ── Product — Public Detail (full) ───────────────────────────────────────────
