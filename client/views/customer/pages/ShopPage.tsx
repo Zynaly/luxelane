@@ -25,13 +25,21 @@ export const ShopPage: React.FC<ShopPageProps> = ({ onNavigate, onCartChange, in
     const loadCatalog = async () => {
       setLoading(true);
       try {
-        const [prodRes, catRes] = await Promise.all([
+        const [prodResult, catResult] = await Promise.allSettled([
           API.Product.list(),
           API.Category.list(),
         ]);
         if (isMounted) {
-          setProducts(prodRes);
-          setCategories(catRes);
+          if (prodResult.status === 'fulfilled') {
+            setProducts(prodResult.value);
+          } else {
+            console.error('Failed to load products:', prodResult.reason);
+          }
+          if (catResult.status === 'fulfilled') {
+            setCategories(catResult.value);
+          } else {
+            console.error('Failed to load categories:', catResult.reason);
+          }
         }
       } catch (err) {
         console.error('Failed to load marketplace catalog:', err);

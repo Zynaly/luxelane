@@ -16,14 +16,22 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) 
 
   useEffect(() => {
     let active = true;
-    Promise.all([
+    Promise.allSettled([
       API.Product.list(),
       API.Category.list(),
     ])
-      .then(([prods, cats]) => {
+      .then(([prodRes, catRes]) => {
         if (active) {
-          setProducts(prods);
-          setCategories(cats);
+          if (prodRes.status === 'fulfilled') {
+            setProducts(prodRes.value);
+          } else {
+            console.error('Failed to load home products:', prodRes.reason);
+          }
+          if (catRes.status === 'fulfilled') {
+            setCategories(catRes.value);
+          } else {
+            console.error('Failed to load home categories:', catRes.reason);
+          }
         }
       })
       .catch((err) => console.error('Failed to load home catalog:', err))
@@ -102,23 +110,24 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) 
 
       <main>
         {/* Hero Banner */}
-        <div className="relative bg-stone-950 text-white overflow-hidden">
-          <div aria-hidden="true" className="absolute inset-0 opacity-40">
+        <div className="relative bg-stone-900 text-white overflow-hidden">
+          <div aria-hidden="true" className="absolute inset-0">
             <img
               src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1920"
               alt="Hero banner"
-              className="w-full h-full object-center object-cover"
+              className="w-full h-full object-center object-cover opacity-75"
             />
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/80 via-stone-950/40 to-stone-950/25" />
           </div>
-          <div className="relative max-w-4xl mx-auto py-28 px-6 flex flex-col items-center text-center sm:py-36">
-            <span className="text-amber-400 text-xs uppercase tracking-[0.25em] font-semibold mb-4">
-              LuxeLane Haute Marketplace
+          <div className="relative max-w-3xl mx-auto py-28 px-6 flex flex-col items-center text-center sm:py-36">
+            <span className="text-amber-300 text-xs uppercase tracking-[0.25em] font-semibold mb-4 px-3.5 py-1 rounded-full border border-amber-400/40 bg-stone-950/40 backdrop-blur-sm">
+              New Season
             </span>
-            <h1 className="text-4xl sm:text-6xl font-serif font-bold tracking-tight text-white leading-tight">
-              Elegance in Every Detail
+            <h1 className="text-4xl sm:text-6xl font-serif font-bold tracking-tight text-white leading-tight drop-shadow-md">
+              Timeless Luxury
             </h1>
-            <p className="mt-4 text-lg text-stone-300 max-w-2xl font-light">
-              Explore bespoke collections from master European maisons. Pure vicuña tailoring, handcrafted footwear, rare Grasse extraits, and aesthetic living gifts.
+            <p className="mt-4 text-lg text-stone-200 max-w-xl font-light drop-shadow-sm">
+              Curated pieces for the modern connoisseur.
             </p>
             <div className="mt-8 flex flex-wrap gap-4 justify-center">
               <button
@@ -126,7 +135,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) 
                 onClick={() => onNavigate('shop')}
                 className="bg-amber-800 hover:bg-amber-900 border border-transparent rounded-full py-3 px-10 text-sm font-semibold text-white transition-colors shadow-lg"
               >
-                Shop Full Catalog ({products.length} Items)
+                Explore Collection →
               </button>
               <button
                 type="button"

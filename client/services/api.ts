@@ -35,9 +35,62 @@ export const TokenService = {
   },
 };
 
+// In-flight refresh promise to prevent duplicate concurrent refresh calls
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refreshToken = TokenService.getRefreshToken();
+    if (!refreshToken) {
+      TokenService.removeTokens();
+      return null;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: refreshToken }),
+      });
+
+      if (!res.ok) {
+        TokenService.removeTokens();
+        return null;
+      }
+
+      const data = await res.json();
+      if (data.access) {
+        TokenService.setToken(data.access);
+        if (data.refresh) {
+          TokenService.setRefreshToken(data.refresh);
+        }
+        return data.access as string;
+      }
+
+      TokenService.removeTokens();
+      return null;
+    } catch {
+      TokenService.removeTokens();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 // Generic API request handler
-export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
+export async function apiRequest<T>(
+  endpoint: string,
+  options: RequestInit & { _isRetry?: boolean } = {}
+): Promise<T> {
+  const isAbsolute = endpoint.startsWith('http://') || endpoint.startsWith('https://');
+  const url = isAbsolute
+    ? endpoint
+    : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -59,6 +112,41 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
     // Handle 204 No Content
     if (response.status === 204) {
       return {} as T;
+    }
+
+    // Handle 401 Unauthorized (e.g. expired or invalid JWT token)
+    if (response.status === 401 && !options._isRetry) {
+      const isAuthEndpoint =
+        endpoint.includes('/auth/login') ||
+        endpoint.includes('/auth/token/refresh') ||
+        endpoint.includes('/auth/register');
+
+      if (!isAuthEndpoint) {
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          // Retry the request with the refreshed token
+          return apiRequest<T>(endpoint, {
+            ...options,
+            _isRetry: true,
+          });
+        }
+
+        // Token refresh failed or expired - clear stored tokens
+        TokenService.removeTokens();
+
+        // For public GET requests (products, categories, brands, etc.), retry anonymously without auth header
+        const isGet = !options.method || options.method.toUpperCase() === 'GET';
+        if (isGet) {
+          return apiRequest<T>(endpoint, {
+            ...options,
+            headers: {
+              ...options.headers,
+              Authorization: '',
+            },
+            _isRetry: true,
+          });
+        }
+      }
     }
 
     const data = await response.json().catch(() => ({}));
@@ -1055,15 +1143,32 @@ export const BrandAPI = {
 
 // ── Product API (Sprint 4) ────────────────────────────────────────────────────
 export const ProductAPI = {
-  // Public endpoints
   list: async (params: { category?: string; brand?: string; search?: string } = {}): Promise<ProductListItem[]> => {
     const q = new URLSearchParams();
     if (params.category) q.set('category', params.category);
     if (params.brand) q.set('brand', params.brand);
     if (params.search) q.set('search', params.search);
     const qs = q.toString() ? `?${q.toString()}` : '';
-    const res = await apiRequest<any>(`/products/${qs}`, { method: 'GET' });
-    return res.results || res || [];
+    const firstRes = await apiRequest<any>(`/products/${qs}`, { method: 'GET' });
+    const allResults: ProductListItem[] = [...(firstRes.results || (Array.isArray(firstRes) ? firstRes : []))];
+
+    // Follow cursor pagination to fetch all pages
+    let nextUrl: string | null = firstRes.next || null;
+    let pageCount = 0;
+    while (nextUrl && pageCount < 20) {
+      pageCount++;
+      try {
+        const pageRes = await apiRequest<any>(nextUrl, { method: 'GET' });
+        const pageItems = pageRes.results || (Array.isArray(pageRes) ? pageRes : []);
+        if (pageItems.length === 0) break;
+        allResults.push(...pageItems);
+        nextUrl = pageRes.next || null;
+      } catch (pageErr) {
+        console.warn('[ProductAPI.list] Error fetching next page, returning accumulated results:', pageErr);
+        break;
+      }
+    }
+    return allResults;
   },
 
   retrieve: async (id: string): Promise<ProductDetail> => {
