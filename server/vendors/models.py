@@ -1,4 +1,4 @@
-﻿"""
+"""
 vendors/models.py — Sprint 3: Vendors, KYC, Staff, Commission.
 
 Models:
@@ -205,3 +205,92 @@ class CommissionRule(BaseModel):
     def __str__(self):
         vendor_label = self.vendor.display_name if self.vendor_id else "Platform Default"
         return f"{vendor_label}: {self.rate_pct}% from {self.effective_from}"
+
+
+# ── Sprint 15: Vendor Payouts & Adjustments ───────────────────────────────────
+
+class VendorPayoutStatus(models.TextChoices):
+    SCHEDULED  = "scheduled",  "Scheduled"
+    PROCESSING = "processing", "Processing"
+    PAID       = "paid",       "Paid"
+    FAILED     = "failed",     "Failed"
+
+
+class PayoutAdjustmentReason(models.TextChoices):
+    POST_RELEASE_REFUND = "post_release_refund", "Post Release Refund"
+    PENALTY             = "penalty",             "Penalty"
+    CORRECTION          = "correction",          "Correction"
+
+
+class VendorPayout(BaseModel):
+    """
+    Settlement payout batch disbursed to a vendor for a specific accounting period.
+    Consolidates mature released escrow holds minus post-release refund adjustments.
+    """
+    vendor                = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="payouts")
+    period_start          = models.DateField(db_index=True)
+    period_end            = models.DateField(db_index=True)
+    gross_amount          = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    adjustments_total     = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    net_amount            = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    status                = models.CharField(
+        max_length=20,
+        choices=VendorPayoutStatus.choices,
+        default=VendorPayoutStatus.SCHEDULED,
+        db_index=True,
+    )
+    disbursed_at          = models.DateTimeField(null=True, blank=True)
+    external_transfer_id  = models.CharField(max_length=150, blank=True)
+    ledger_entry_group_id = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["vendor", "period_start", "period_end"]),
+            models.Index(fields=["status"]),
+        ]
+
+    def __str__(self):
+        return f"Payout {self.id} — {self.vendor.display_name} (${self.net_amount}) [{self.status}]"
+
+
+class PayoutLineItem(BaseModel):
+    """
+    Individual fulfilled VendorOrder covered by a VendorPayout.
+    """
+    payout       = models.ForeignKey(VendorPayout, on_delete=models.CASCADE, related_name="line_items")
+    vendor_order = models.ForeignKey("orders.VendorOrder", on_delete=models.CASCADE, related_name="payout_line_items")
+    amount       = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = [("payout", "vendor_order")]
+
+    def __str__(self):
+        return f"LineItem for VendorOrder {self.vendor_order_id} (${self.amount})"
+
+
+class PayoutAdjustment(BaseModel):
+    """
+    Financial adjustment applied to a vendor's payout (e.g. clawback for post-release refund).
+    Negative amount indicates a clawback/debit against the vendor.
+    """
+    vendor              = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="payout_adjustments")
+    payout              = models.ForeignKey(
+        VendorPayout,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adjustments",
+    )
+    amount              = models.DecimalField(max_digits=12, decimal_places=2)  # negative = clawback
+    reason              = models.CharField(max_length=50, choices=PayoutAdjustmentReason.choices)
+    source_reference_id = models.UUIDField(null=True, blank=True)
+    note                = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Adjustment {self.amount} for {self.vendor.display_name} ({self.reason})"
+

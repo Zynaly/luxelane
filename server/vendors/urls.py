@@ -1,10 +1,9 @@
-﻿"""
-vendors/urls.py — Sprint 3 vendor URL patterns.
+"""
+vendors/urls.py — Sprint 3 + Sprint 4 vendor URL patterns.
 Mounted at /api/v1/ in config/api_router.py as:
   path("vendors/", include("vendors.urls"))
-  path("admin/commission-rules/", include("vendors.urls_commission"))
 """
-from django.urls import path
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from vendors.views import (
@@ -19,6 +18,10 @@ from vendors.views import (
     AdminVendorStatusUpdateView,
     AdminVendorDocumentReviewView,
     AdminCommissionRuleViewSet,
+    VendorMyPayoutsViewSet,
+    VendorAnalyticsView,
+    AdminPayoutProcessView,
+    AdminVendorPayoutViewSet,
 )
 
 # ── Vendor-facing routes (/api/v1/vendors/) ───────────────────────────────────
@@ -63,6 +66,26 @@ urlpatterns = [
         VendorPolicyView.as_view(),
         name="vendor-policy",
     ),
+    # Sprint 15 — Vendor Payouts & Analytics
+    path(
+        "me/payouts/",
+        VendorMyPayoutsViewSet.as_view({"get": "list"}),
+        name="vendor-my-payouts-list",
+    ),
+    path(
+        "me/payouts/<uuid:pk>/",
+        VendorMyPayoutsViewSet.as_view({"get": "retrieve"}),
+        name="vendor-my-payouts-detail",
+    ),
+    path(
+        "me/analytics/",
+        VendorAnalyticsView.as_view(),
+        name="vendor-analytics",
+    ),
+    # Sprint 4 — Vendor products (lazy include to avoid circular imports)
+    path("me/products/", include("catalog.urls_vendor")),
+    # Sprint 10 — Vendor orders
+    path("", include("orders.urls_vendor")),
 ]
 
 # ── Admin vendor routes (injected under /api/v1/admin/) ───────────────────────
@@ -102,4 +125,26 @@ admin_urlpatterns = [
         }),
         name="admin-commission-detail",
     ),
+    # Sprint 15 — Admin Payout Processing & List
+    path(
+        "payouts/process/",
+        AdminPayoutProcessView.as_view(),
+        name="admin-payouts-process-all",
+    ),
+    path(
+        "vendors/<uuid:id>/payouts/process/",
+        AdminPayoutProcessView.as_view(),
+        name="admin-vendor-payout-process",
+    ),
+    path(
+        "payouts/",
+        AdminVendorPayoutViewSet.as_view({"get": "list"}),
+        name="admin-payouts-list",
+    ),
+    path(
+        "payouts/<uuid:pk>/",
+        AdminVendorPayoutViewSet.as_view({"get": "retrieve"}),
+        name="admin-payouts-detail",
+    ),
 ]
+

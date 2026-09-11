@@ -17,31 +17,78 @@ import VendorManagementPage from './views/admin/pages/VendorManagementPage';
 import CommissionManagementPage from './views/admin/pages/CommissionManagementPage';
 import VendorDashboard from './views/vendor/VendorDashboard';
 import VendorStorefrontPage from './views/customer/pages/VendorStorefrontPage';
+import CartPage from './views/customer/pages/CartPage';
 
 import { User } from './types';
 import { mockUser, mockAdminUser } from './data/mockData';
 import API, { TokenService } from './services/api';
 
-// Placeholder Customer Pages for routes not fully built out
-const CartPagePlaceholder: React.FC = () => <div className="p-8 text-center text-2xl font-serif">Shopping Cart Page</div>;
-
 type CustomerPage = 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account';
 type AdminPage = 'dashboard' | 'products' | 'orders' | 'customers' | 'vendors' | 'commissions' | 'warehouse';
 
-const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () => void }> = ({ onNavigate, onLogout }) => {
+const Header: React.FC<{
+  currentPage?: CustomerPage;
+  onNavigate: (page: CustomerPage) => void;
+  onLogout: () => void;
+  cartItemCount?: number;
+}> = ({ currentPage = 'home', onNavigate, onLogout, cartItemCount = 0 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const cartItemCount = 3; // Mocked value
+
+  const navLinkClass = (p: CustomerPage) =>
+    `text-sm font-semibold transition-colors pb-1 ${
+      currentPage === p
+        ? 'text-dark border-b-2 border-dark'
+        : 'text-gray-600 hover:text-dark hover:border-b-2 hover:border-gray-300'
+    }`;
 
   return (
-    <header className="bg-white sticky top-0 z-40 shadow-sm">
-      <div className="bg-dark text-white text-center py-2 px-4 text-sm font-medium">
+    <header className="bg-white sticky top-0 z-40 shadow-sm border-b border-gray-100">
+      <div className="bg-dark text-white text-center py-2 px-4 text-sm font-medium tracking-wide">
         Free shipping on all orders over $50
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 border-b border-gray-200">
-          <div className="flex items-center">
-            <span className="text-3xl font-serif font-bold text-dark cursor-pointer" onClick={() => onNavigate('home')}>LuxeLane</span>
+        <div className="flex items-center justify-between h-20">
+          {/* Logo & Navigation Links together on left */}
+          <div className="flex items-center space-x-8">
+            <span
+              className="text-3xl font-serif font-bold text-dark cursor-pointer tracking-tight"
+              onClick={() => onNavigate('home')}
+            >
+              LuxeLane
+            </span>
+
+            {/* Navigation links in the empty space next to LuxeLane */}
+            <nav className="hidden lg:flex items-center space-x-7">
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onNavigate('home'); }}
+                className={navLinkClass('home')}
+              >
+                Home
+              </a>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onNavigate('shop'); }}
+                className={navLinkClass('shop')}
+              >
+                Shop
+              </a>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onNavigate('about'); }}
+                className={navLinkClass('about')}
+              >
+                About Us
+              </a>
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); onNavigate('contact'); }}
+                className={navLinkClass('contact')}
+              >
+                Contact
+              </a>
+            </nav>
           </div>
 
           <div className="flex-1 flex justify-center px-2 lg:ml-6 lg:justify-end">
@@ -85,13 +132,6 @@ const Header: React.FC<{ onNavigate: (page: CustomerPage) => void; onLogout: () 
             </button>
           </div>
         </div>
-
-        <nav className="hidden lg:flex lg:items-center lg:justify-center lg:space-x-8 h-12">
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('home'); }} className="text-gray-600 hover:text-dark text-sm font-semibold transition-colors">Home</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('shop'); }} className="text-gray-600 hover:text-dark text-sm font-semibold transition-colors">Shop</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('about'); }} className="text-gray-600 hover:text-dark text-sm font-semibold transition-colors">About Us</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('contact'); }} className="text-gray-600 hover:text-dark text-sm font-semibold transition-colors">Contact</a>
-        </nav>
 
         {/* Mobile dropdown menu */}
         {menuOpen && (
@@ -230,14 +270,21 @@ const ChatbotWidget: React.FC<{isOpen: boolean, onToggle: () => void}> = ({isOpe
 const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [page, setPage] = useState<CustomerPage>('home');
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+
+  useEffect(() => {
+    API.Cart.getSummary()
+      .then((summary) => setCartCount(summary.item_count || 0))
+      .catch(() => {});
+  }, []);
 
   const renderPage = () => {
     switch (page) {
-      case 'home': return <HomePage onNavigate={setPage} />;
-      case 'shop': return <ShopPage />;
+      case 'home': return <HomePage onNavigate={setPage} onCartChange={setCartCount} />;
+      case 'shop': return <ShopPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'about': return <AboutUsPage />;
       case 'contact': return <ContactPage onOpenChat={() => setIsChatOpen(true)} />;
-      case 'cart': return <CartPagePlaceholder />;
+      case 'cart': return <CartPage onNavigate={setPage} onCartChange={setCartCount} />;
       case 'account': return <AccountPage onLogout={onLogout} />;
       default: return <HomePage onNavigate={setPage} />;
     }
@@ -245,7 +292,7 @@ const CustomerView: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      <Header onNavigate={setPage} onLogout={onLogout} />
+      <Header currentPage={page} onNavigate={setPage} onLogout={onLogout} cartItemCount={cartCount} />
       <main className="flex-grow">{renderPage()}</main>
       <Footer onNavigate={setPage} />
       <ChatbotWidget isOpen={isChatOpen} onToggle={() => setIsChatOpen(prev => !prev)}/>

@@ -94,20 +94,25 @@ class VendorRegisterSerializer(UserRegisterSerializer):
 # ── Login ─────────────────────────────────────────────────────────────────────
 class LoginSerializer(TokenObtainPairSerializer):
     """
-    email_or_phone + password → access + refresh tokens.
+    email_or_phone / email + password → access + refresh tokens.
     Works as the custom TOKEN_OBTAIN_SERIALIZER for SimpleJWT.
     """
     username_field = "email_or_phone"
-    email_or_phone = serializers.CharField()
+    email_or_phone = serializers.CharField(required=False, allow_blank=True)
+    email          = serializers.CharField(required=False, allow_blank=True)
     password       = serializers.CharField(write_only=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Remove default username/password fields added by parent
-        self.fields.pop("email", None)
+        if "email_or_phone" in self.fields:
+            self.fields["email_or_phone"].required = False
+        if "email" in self.fields:
+            self.fields["email"].required = False
 
     def validate(self, data):
-        email_or_phone = data.get("email_or_phone", "").strip()
+        email_or_phone = (data.get("email_or_phone") or data.get("email") or "").strip()
+        if not email_or_phone:
+            raise serializers.ValidationError({"email_or_phone": "Please provide an email or phone number."})
         password = data.get("password", "")
 
         # Resolve to a User

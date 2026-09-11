@@ -22,8 +22,26 @@ LOGGING = {
     },
 }
 
-# Relax CORS in dev
+# Relax CORS & CSRF in dev
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://10.0.2.2:8000",
+    "http://10.0.2.2:5173",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:\d+$",
+    r"^http://127\.0\.0\.1:\d+$",
+    r"^http://10\.0\.2\.2:\d+$",
+    r"^http://192\.168\.\d+\.\d+(:\d+)?$",
+]
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
 # If EMAIL_HOST_USER is not configured in dev, fallback to console
 if not EMAIL_HOST_USER:
@@ -44,3 +62,13 @@ except Exception:
     }
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+
+# Disable throttling in dev so rapid mobile/web reloads and testing are never throttled
+REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = []
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {
+    "anon": "100000/hour",
+    "user": "100000/hour",
+    "auth": "1000/min",
+    "checkout": "1000/min",
+    "search": "1000/min",
+}

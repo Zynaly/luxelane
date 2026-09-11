@@ -1,168 +1,347 @@
-import React from 'react';
-import { Product, Category } from '../../types';
-import { mockCategories, mockProducts } from '../../data/mockData';
+import React, { useState, useEffect } from 'react';
 import { Icon } from '../../components/Icon';
+import API, { ProductListItem, CategoryItem } from '../../services/api';
 
-const ProductCard: React.FC<{ product: Product }> = ({ product }) => {
-  return (
-    <div className="group relative bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden transition-shadow duration-300">
-      <div className="w-full aspect-w-1 aspect-h-1 bg-gray-200 overflow-hidden">
-        <img
-          src={product.imageUrl}
-          alt={product.name}
-          className="w-full h-full object-center object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <button className="bg-white text-dark py-2 px-4 rounded-full font-semibold text-sm transform group-hover:translate-y-0 translate-y-4 transition-transform duration-300">
-            Add to Cart
-          </button>
-        </div>
-      </div>
-      <div className="p-4 text-center">
-        <h3 className="text-base font-medium text-gray-800">
-            <a href="#">
-                <span aria-hidden="true" className="absolute inset-0" />
-                {product.name}
-            </a>
-        </h3>
-        <p className="mt-2 text-lg font-bold text-dark">${product.price.toFixed(2)}</p>
-        <div className="mt-2 flex items-center justify-center">
-          {[...Array(5)].map((_, i) => (
-            <Icon key={i} name="star" className={`w-4 h-4 ${i < Math.round(product.rating) ? 'text-accent' : 'text-gray-300'}`} />
-          ))}
-          <span className="ml-2 text-xs text-gray-500">{product.reviewCount} reviews</span>
-        </div>
-      </div>
-    </div>
-  );
-};
+interface HomePageProps {
+  onNavigate: (page: 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account') => void;
+  onCartChange?: (itemCount: number) => void;
+}
 
-const HomePage: React.FC<{ onNavigate: (page: 'shop') => void }> = ({ onNavigate }) => {
-  const featuredProducts = mockProducts.slice(0, 4);
-  const newArrivals = mockProducts.slice(4, 8);
+export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onCartChange }) => {
+  const [products, setProducts] = useState<ProductListItem[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      API.Product.list(),
+      API.Category.list(),
+    ])
+      .then(([prodRes, catRes]) => {
+        if (active) {
+          if (prodRes.status === 'fulfilled') {
+            setProducts(prodRes.value);
+          } else {
+            console.error('Failed to load home products:', prodRes.reason);
+          }
+          if (catRes.status === 'fulfilled') {
+            setCategories(catRes.value);
+          } else {
+            console.error('Failed to load home categories:', catRes.reason);
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to load home catalog:', err))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const handleAddToCart = async (product: ProductListItem) => {
+    try {
+      setAddingId(product.id);
+      let variantId = product.primary_variant_id;
+      if (!variantId) {
+        const detail = await API.Product.retrieve(product.id);
+        if (detail.variants && detail.variants.length > 0) {
+          variantId = detail.variants[0].id;
+        }
+      }
+      if (!variantId) throw new Error('No available stock variant.');
+      await API.Cart.addItem({ variant_id: variantId, quantity: 1 });
+      const summary = await API.Cart.getSummary();
+      onCartChange?.(summary.item_count || 0);
+      setToastMsg(`Added "${product.title}" to bag`);
+      setTimeout(() => setToastMsg(null), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Could not add to bag');
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const featuredProducts = products.slice(0, 4);
+  const newArrivals = products.slice(4, 12);
+
+  // Key curated categories
+  const heroCategories = [
+    {
+      slug: 'clothes',
+      name: 'Clothes & Couture',
+      subtitle: 'Italian Silk & Cashmere',
+      image: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'shoes',
+      name: 'Luxury Footwear',
+      subtitle: 'Artisanal Box Calf & Pumps',
+      image: 'https://images.unsplash.com/photo-1614252235316-8c857d38b5f4?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'cosmetics',
+      name: 'Cosmetics & Perfumes',
+      subtitle: 'Botanical Elixirs & Extraits',
+      image: 'https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+      slug: 'aesthetic-gifts',
+      name: 'Aesthetic Gifts & Living',
+      subtitle: 'Hand-poured Bougies & Crystal',
+      image: 'https://images.unsplash.com/photo-1603006905003-be475563bc59?auto=format&fit=crop&q=80&w=800',
+    },
+  ];
 
   return (
     <div className="bg-white">
+      {/* Toast */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3 border border-amber-800 animate-bounce">
+          <Icon name="check" className="w-5 h-5 text-emerald-400" />
+          <span className="text-sm font-medium">{toastMsg}</span>
+          <button onClick={() => onNavigate('cart')} className="text-amber-300 text-xs underline font-bold">
+            Checkout
+          </button>
+        </div>
+      )}
+
       <main>
-        {/* Hero Section */}
-        <div className="relative bg-dark">
-          <div aria-hidden="true" className="absolute inset-0 overflow-hidden">
+        {/* Hero Banner */}
+        <div className="relative bg-stone-900 text-white overflow-hidden">
+          <div aria-hidden="true" className="absolute inset-0">
             <img
-              src="https://picsum.photos/seed/hero/1920/1080"
+              src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&q=80&w=1920"
               alt="Hero banner"
-              className="w-full h-full object-center object-cover"
+              className="w-full h-full object-center object-cover opacity-75"
             />
+            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/80 via-stone-950/40 to-stone-950/25" />
           </div>
-          <div aria-hidden="true" className="absolute inset-0 bg-dark opacity-60" />
-          <div className="relative max-w-3xl mx-auto py-32 px-6 flex flex-col items-center text-center sm:py-48 lg:px-0">
-            <h1 className="text-4xl font-serif font-bold tracking-tight text-white lg:text-6xl">Elegance in Every Detail</h1>
-            <p className="mt-4 text-xl text-gray-300">
-              Discover our new collection, crafted with passion and precision for the modern connoisseur.
+          <div className="relative max-w-3xl mx-auto py-28 px-6 flex flex-col items-center text-center sm:py-36">
+            <span className="text-amber-300 text-xs uppercase tracking-[0.25em] font-semibold mb-4 px-3.5 py-1 rounded-full border border-amber-400/40 bg-stone-950/40 backdrop-blur-sm">
+              New Season
+            </span>
+            <h1 className="text-4xl sm:text-6xl font-serif font-bold tracking-tight text-white leading-tight drop-shadow-md">
+              Timeless Luxury
+            </h1>
+            <p className="mt-4 text-lg text-stone-200 max-w-xl font-light drop-shadow-sm">
+              Curated pieces for the modern connoisseur.
             </p>
-            <a
-              href="#"
-              onClick={(e) => { e.preventDefault(); onNavigate('shop'); }}
-              className="mt-8 inline-block bg-accent border border-transparent rounded-full py-3 px-12 text-base font-semibold text-white hover:bg-accent-hover transition-colors"
-            >
-              Explore Collection
-            </a>
+            <div className="mt-8 flex flex-wrap gap-4 justify-center">
+              <button
+                type="button"
+                onClick={() => onNavigate('shop')}
+                className="bg-amber-800 hover:bg-amber-900 border border-transparent rounded-full py-3 px-10 text-sm font-semibold text-white transition-colors shadow-lg"
+              >
+                Explore Collection →
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('cart')}
+                className="bg-white/10 hover:bg-white/20 backdrop-blur border border-white/30 rounded-full py-3 px-8 text-sm font-semibold text-white transition-colors"
+              >
+                View Shopping Bag
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Category Section */}
-        <section aria-labelledby="category-heading" className="py-16 sm:py-24 xl:max-w-7xl xl:mx-auto xl:px-8">
-          <div className="px-4 sm:px-6 sm:flex sm:items-center sm:justify-between lg:px-8 xl:px-0">
-            <h2 id="category-heading" className="text-3xl font-serif font-bold tracking-tight text-dark">
-              Shop by Category
-            </h2>
-            <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('shop'); }} className="hidden text-sm font-semibold text-primary hover:text-primary-hover sm:block">
-              Browse all categories<span aria-hidden="true"> &rarr;</span>
-            </a>
-          </div>
-
-          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6 lg:gap-8 px-4 sm:px-0">
-              {mockCategories.map((category) => (
-                <a
-                  key={category.name}
-                  href="#"
-                  onClick={(e) => { e.preventDefault(); onNavigate('shop'); }}
-                  className="group relative h-48 md:h-64 rounded-lg flex flex-col justify-end overflow-hidden"
-                >
-                  <span aria-hidden="true" className="absolute inset-0">
-                    <img src={category.imageUrl} alt="" className="w-full h-full object-center object-cover transition-transform duration-300 group-hover:scale-110" />
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-gray-800 opacity-80"
-                  />
-                  <span className="relative p-4 text-center text-lg font-semibold text-white">{category.name}</span>
-                </a>
-              ))}
-          </div>
-        </section>
-
-        {/* Featured Products Section */}
-        <section aria-labelledby="featured-products-heading" className="bg-secondary py-16 sm:py-24">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 id="featured-products-heading" className="text-4xl font-serif font-bold tracking-tight text-dark">
-                Featured Products
+        {/* Shop by Focus Categories */}
+        <section className="py-16 sm:py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block">
+                Handcrafted Collections
+              </span>
+              <h2 className="text-3xl font-serif font-bold text-stone-900">
+                Shop by Curated Category
               </h2>
-              <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
-                Our top picks, loved by customers like you for their exceptional quality and style.
-              </p>
             </div>
-
-            <div className="mt-12 grid grid-cols-1 gap-y-10 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-8">
-              {featuredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
+            <button
+              onClick={() => onNavigate('shop')}
+              className="text-sm font-semibold text-amber-800 hover:text-stone-900 flex items-center space-x-1"
+            >
+              <span>Explore All</span>
+              <Icon name="arrow-right" className="w-4 h-4" />
+            </button>
           </div>
-        </section>
 
-        {/* Special Offers Section */}
-        <section className="relative overflow-hidden my-16 sm:my-24">
-            <div className="max-w-7xl mx-auto">
-              <div className="relative z-10 bg-white p-12 lg:p-20 shadow-xl rounded-lg lg:flex lg:items-center lg:justify-between">
-                <div className="lg:w-1/2">
-                    <h2 className="text-4xl font-serif font-bold tracking-tight text-dark">
-                        Limited Time Offer
-                    </h2>
-                    <p className="mt-4 text-lg text-gray-600">
-                        Don't miss our seasonal sale event. Get your favorites with up to 50% off.
-                    </p>
-                </div>
-                 <div className="mt-8 lg:mt-0 lg:w-1/2 lg:text-right">
-                    <a
-                        href="#"
-                        onClick={(e) => { e.preventDefault(); onNavigate('shop'); }}
-                        className="inline-block bg-accent border border-transparent rounded-full py-3 px-12 text-base font-semibold text-white hover:bg-accent-hover transition-colors"
-                    >
-                        Shop the Sale
-                    </a>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {heroCategories.map((c) => (
+              <div
+                key={c.slug}
+                onClick={() => onNavigate('shop')}
+                className="group relative h-80 rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
+              >
+                <img
+                  src={c.image}
+                  alt={c.name}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/30 to-transparent" />
+                <div className="absolute bottom-6 left-6 right-6">
+                  <span className="text-amber-300 text-[11px] font-semibold uppercase tracking-wider block mb-1">
+                    {c.subtitle}
+                  </span>
+                  <h3 className="text-xl font-serif font-bold text-white group-hover:text-amber-200 transition-colors">
+                    {c.name}
+                  </h3>
                 </div>
               </div>
-            </div>
+            ))}
+          </div>
         </section>
 
-        {/* New Arrivals Section */}
-        <section aria-labelledby="new-arrivals-heading" className="bg-secondary py-16 sm:py-24">
+        {/* Featured Products Showcase */}
+        <section className="bg-stone-50 py-16 sm:py-24 border-y border-stone-200/70">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center">
-              <h2 id="new-arrivals-heading" className="text-4xl font-serif font-bold tracking-tight text-dark">
-                New Arrivals
+            <div className="text-center max-w-2xl mx-auto mb-12">
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-1">
+                Atelier Masterpieces
+              </span>
+              <h2 className="text-3xl sm:text-4xl font-serif font-bold text-stone-900">
+                Featured Highlights
               </h2>
-              <p className="mt-4 max-w-2xl mx-auto text-lg text-gray-600">
-                Fresh out of the box. Check out the latest additions to our curated collection.
+              <p className="mt-2 text-stone-600 text-sm">
+                Each piece certified authentic and backed by white-glove insured delivery.
               </p>
             </div>
 
-            <div className="mt-12 grid grid-cols-1 gap-y-10 sm:grid-cols-2 lg:grid-cols-4 xl:gap-x-8">
-              {newArrivals.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl h-80 animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {featuredProducts.map((product) => {
+                  const isAdding = addingId === product.id;
+                  return (
+                    <div
+                      key={product.id}
+                      className="group bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden flex flex-col hover:shadow-xl transition-all duration-300"
+                    >
+                      <div className="relative aspect-[4/5] bg-stone-100 overflow-hidden">
+                        <img
+                          src={product.primary_image || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=600'}
+                          alt={product.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                        />
+                        <div className="absolute top-3 left-3">
+                          <span className="bg-white/95 backdrop-blur text-stone-900 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm">
+                            {product.category_name}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-5 flex-1 flex flex-col justify-between">
+                        <div>
+                          {product.brand_name && (
+                            <p className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider mb-1">
+                              {product.brand_name}
+                            </p>
+                          )}
+                          <h3 className="text-sm font-serif font-bold text-stone-900 group-hover:text-amber-900 transition-colors line-clamp-2">
+                            {product.title}
+                          </h3>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
+                          <span className="text-base font-bold text-stone-900">
+                            ${parseFloat(product.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddToCart(product)}
+                            disabled={isAdding}
+                            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-stone-900 hover:bg-amber-900 text-white text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            <Icon name="cart" className="w-3.5 h-3.5" />
+                            <span>{isAdding ? '...' : 'Add'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* New Arrivals Grid */}
+        <section className="py-16 sm:py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-10">
+            <div>
+              <span className="text-xs font-bold text-amber-800 uppercase tracking-widest block mb-1">
+                Seasonal Drop
+              </span>
+              <h2 className="text-3xl font-serif font-bold text-stone-900">
+                New Arrivals: Clothes, Shoes, Fragrance & Living
+              </h2>
             </div>
+            <button
+              onClick={() => onNavigate('shop')}
+              className="text-sm font-semibold text-amber-800 hover:text-stone-900 flex items-center space-x-1"
+            >
+              <span>View All {products.length} Products</span>
+              <Icon name="arrow-right" className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {newArrivals.map((product) => {
+              const isAdding = addingId === product.id;
+              return (
+                <div
+                  key={product.id}
+                  className="group bg-white rounded-2xl border border-stone-200/80 shadow-sm overflow-hidden flex flex-col hover:shadow-lg transition-all"
+                >
+                  <div className="relative aspect-[4/5] bg-stone-100 overflow-hidden">
+                    <img
+                      src={product.primary_image || 'https://images.unsplash.com/photo-1544441893-675973e31985?auto=format&fit=crop&q=80&w=600'}
+                      alt={product.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                    <div className="absolute top-3 left-3">
+                      <span className="bg-stone-900/80 text-white text-[10px] font-medium px-2 py-0.5 rounded-md">
+                        {product.vendor_display_name}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      {product.brand_name && (
+                        <p className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider mb-0.5">
+                          {product.brand_name}
+                        </p>
+                      )}
+                      <h3 className="text-xs font-serif font-bold text-stone-900 line-clamp-1">
+                        {product.title}
+                      </h3>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-stone-100 flex items-center justify-between">
+                      <span className="text-sm font-bold text-stone-900">
+                        ${parseFloat(product.base_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddToCart(product)}
+                        disabled={isAdding}
+                        className="px-2.5 py-1 bg-stone-900 hover:bg-amber-900 text-white text-[11px] font-medium rounded-md transition-colors"
+                      >
+                        {isAdding ? '...' : 'Add'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       </main>

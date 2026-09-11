@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from '../../../components/Icon';
-import API, { AddressData } from '../../../services/api';
+import API, { AddressData, Order, SavedCard, WalletBalance, WalletTransaction } from '../../../services/api';
 
 interface AccountPageProps {
   onLogout?: () => void;
@@ -16,9 +16,26 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'notifications' | 'security' | 'vendor_apply'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'orders' | 'addresses' | 'notifications' | 'security' | 'vendor_apply' | 'payments' | 'wallet'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Saved Payment Cards State (Sprint 11)
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(false);
+
+  // Customer Wallet State (Sprint 12)
+  const [wallet, setWallet] = useState<WalletBalance | null>(null);
+  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
+  const [walletLoading, setWalletLoading] = useState(false);
+
+  // Orders State (Sprint 10)
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   // Vendor Application State
   const [vendorApp, setVendorApp] = useState({
@@ -76,11 +93,99 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
     fetchProfile();
     fetchAddresses();
     fetchNotifications();
+    fetchOrders();
+    fetchCards();
+    fetchWallet();
   }, []);
 
   const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), 4000);
+  };
+
+  const fetchWallet = async () => {
+    try {
+      setWalletLoading(true);
+      const [bal, txs] = await Promise.all([
+        API.Payment.getWalletBalance(),
+        API.Payment.getWalletTransactions(),
+      ]);
+      setWallet(bal);
+      setWalletTransactions(txs.results || []);
+    } catch (err: any) {
+      console.error('Failed to load wallet:', err);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const fetchCards = async () => {
+    try {
+      setCardsLoading(true);
+      const data = await API.Payment.listCards();
+      setSavedCards(data.results || []);
+    } catch (err: any) {
+      console.error('Failed to fetch saved cards:', err);
+    } finally {
+      setCardsLoading(false);
+    }
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    if (!window.confirm('Are you sure you want to remove this saved payment card?')) return;
+    try {
+      await API.Payment.deleteCard(cardId);
+      setSavedCards(prev => prev.filter(c => c.id !== cardId));
+      showMsg('Payment card removed successfully.');
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to remove card.', 'error');
+    }
+  };
+
+  const handleSetDefaultCard = async (cardId: string) => {
+    try {
+      await API.Payment.setDefaultCard(cardId);
+      setSavedCards(prev => prev.map(c => ({
+        ...c,
+        is_default: c.id === cardId,
+      })));
+      showMsg('Default payment card updated.');
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to update default card.', 'error');
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      setOrdersLoading(true);
+      const data = await API.Order.list();
+      setOrders(data);
+    } catch (err: any) {
+      console.error('Failed to fetch orders:', err);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cancelModalOrder) return;
+    setCancelling(true);
+    try {
+      await API.Order.cancel(cancelModalOrder.id, cancelReason || 'Customer requested cancellation.');
+      showMsg('Order successfully cancelled.');
+      setCancelModalOrder(null);
+      setCancelReason('');
+      fetchOrders();
+      if (selectedOrder?.id === cancelModalOrder.id) {
+        const updated = await API.Order.get(cancelModalOrder.id);
+        setSelectedOrder(updated);
+      }
+    } catch (err: any) {
+      showMsg(err.message || 'Failed to cancel order.', 'error');
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const fetchProfile = async () => {
@@ -360,6 +465,15 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
               <Icon name="user" className="w-5 h-5 mr-3" /> Profile Details
             </button>
             <button
+              id="account-tab-orders"
+              onClick={() => { setActiveTab('orders'); setSelectedOrder(null); }}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === 'orders' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Icon name="orders" className="w-5 h-5 mr-3" /> Orders & Receipts ({orders.length})
+            </button>
+            <button
               id="account-tab-addresses"
               onClick={() => setActiveTab('addresses')}
               className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
@@ -385,6 +499,24 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
               }`}
             >
               <Icon name="lock" className="w-5 h-5 mr-3" /> Security & 2FA
+            </button>
+            <button
+              id="account-tab-payments"
+              onClick={() => setActiveTab('payments')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === 'payments' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Icon name="credit-card" className="w-5 h-5 mr-3" /> Payment Methods ({savedCards.length})
+            </button>
+            <button
+              id="account-tab-wallet"
+              onClick={() => setActiveTab('wallet')}
+              className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                activeTab === 'wallet' ? 'bg-primary text-white' : 'text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <Icon name="star" className="w-5 h-5 mr-3 text-amber-500" /> Wallet & Credit (${wallet ? wallet.balance : '0.00'})
             </button>
             {profile.role === 'customer' && (
               <button
@@ -504,6 +636,211 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* ORDERS & RECEIPTS TAB (Sprint 10) */}
+          {activeTab === 'orders' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Orders & Atelier Receipts</h2>
+                  <p className="text-sm text-gray-500">Track and manage your luxury orders and multi-vendor atelier deliveries.</p>
+                </div>
+                <button
+                  onClick={fetchOrders}
+                  disabled={ordersLoading}
+                  className="px-3.5 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-medium transition-colors"
+                >
+                  {ordersLoading ? 'Refreshing...' : '↻ Refresh'}
+                </button>
+              </div>
+
+              {ordersLoading ? (
+                <div className="py-16 text-center">
+                  <div className="w-10 h-10 border-4 border-gray-200 border-t-stone-800 rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-stone-500 font-serif italic">Retrieving your order records...</p>
+                </div>
+              ) : selectedOrder ? (
+                /* Order Detail View */
+                <div className="space-y-6">
+                  <div className="flex flex-wrap items-center justify-between pb-4 border-b border-gray-200 gap-3">
+                    <button
+                      onClick={() => setSelectedOrder(null)}
+                      className="text-xs font-semibold text-primary hover:underline flex items-center"
+                    >
+                      ← Back to All Orders
+                    </button>
+                    <div className="flex items-center space-x-3">
+                      <span className="font-mono font-bold text-gray-900">{selectedOrder.order_number}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                        selectedOrder.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                        selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        selectedOrder.status === 'fulfilled' ? 'bg-blue-100 text-blue-800' :
+                        'bg-amber-100 text-amber-800'
+                      }`}>
+                        {selectedOrder.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Financial & Delivery Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <span className="text-xs text-stone-500 block mb-1">Placed On</span>
+                      <span className="text-sm font-semibold text-stone-900">
+                        {new Date(selectedOrder.placed_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <span className="text-xs text-stone-500 block mb-1">Grand Total</span>
+                      <span className="text-base font-serif font-bold text-stone-900 font-mono">
+                        ${selectedOrder.grand_total} {selectedOrder.currency}
+                      </span>
+                    </div>
+                    <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <span className="text-xs text-stone-500 block mb-1">Shipping Destination</span>
+                      <span className="text-xs text-stone-800 font-medium block">
+                        {selectedOrder.shipping_address_snapshot?.line1}, {selectedOrder.shipping_address_snapshot?.city}
+                      </span>
+                      <span className="text-[11px] text-stone-500">
+                        {selectedOrder.shipping_address_snapshot?.state} {selectedOrder.shipping_address_snapshot?.postal_code}, {selectedOrder.shipping_address_snapshot?.country}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Vendor Packages Breakdown */}
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-stone-900">
+                      Atelier Packages ({selectedOrder.vendor_orders?.length || 0})
+                    </h3>
+
+                    {selectedOrder.vendor_orders?.map((vo, idx) => (
+                      <div key={vo.id} className="border border-stone-200 rounded-xl overflow-hidden shadow-sm">
+                        <div className="bg-stone-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div>
+                            <span className="font-bold text-stone-900">{vo.vendor_name || 'Partner Atelier'}</span>
+                            <span className="text-stone-500 ml-2 font-medium text-[11px]">· Package #{idx + 1}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2 py-0.5 rounded bg-white font-medium text-stone-700 border border-stone-300">
+                              Status: {vo.status}
+                            </span>
+                            {vo.tracking_number && (
+                              <span className="font-mono text-stone-600 bg-stone-200 px-2 py-0.5 rounded">
+                                Track: {vo.tracking_number}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-stone-100">
+                          {vo.items?.map((item) => (
+                            <div key={item.id} className="p-4 flex items-center justify-between text-xs hover:bg-stone-50/50">
+                              <div className="space-y-0.5">
+                                <p className="font-semibold text-stone-900">{item.product_title}</p>
+                                <p className="text-stone-500 text-[11px]">
+                                  Variant: {item.variant_name || 'Standard'} · SKU: <span className="font-mono">{item.sku}</span>
+                                </p>
+                                <span className="inline-block px-1.5 py-0.5 bg-stone-100 text-stone-600 rounded text-[10px] uppercase font-mono">
+                                  {item.fulfilment_status}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-stone-500">Qty: {item.quantity} × ${item.unit_price}</p>
+                                <p className="font-mono font-bold text-stone-900">${item.line_subtotal}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Action row */}
+                  <div className="pt-4 border-t border-gray-200 flex justify-between items-center">
+                    <span className="text-xs text-gray-500">
+                      Official invoice and certificate of authenticity verified.
+                    </span>
+                    {['pending_payment', 'paid', 'processing'].includes(selectedOrder.status) && (
+                      <button
+                        onClick={() => setCancelModalOrder(selectedOrder)}
+                        className="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Cancel Order
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
+                  <Icon name="orders" className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <h3 className="text-base font-semibold text-gray-900">No Orders Yet</h3>
+                  <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                    Your luxury bag is awaiting its first curation. Explore our marketplace to place an order.
+                  </p>
+                </div>
+              ) : (
+                /* Orders List */
+                <div className="space-y-3">
+                  {orders.map((ord) => (
+                    <div
+                      key={ord.id}
+                      className="p-5 border border-gray-200 rounded-xl hover:border-stone-400 transition-all bg-white shadow-sm flex flex-wrap items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-3">
+                          <span className="font-mono font-bold text-sm text-stone-900">{ord.order_number}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${
+                            ord.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                            ord.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            ord.status === 'fulfilled' ? 'bg-blue-100 text-blue-800' :
+                            'bg-amber-100 text-amber-800'
+                          }`}>
+                            {ord.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Placed on {new Date(ord.placed_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                          })} · {ord.vendor_orders?.length || 1} atelier shipment(s)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <span className="block font-mono font-bold text-sm text-stone-900">
+                            ${ord.grand_total} {ord.currency}
+                          </span>
+                          <span className="text-[10px] text-gray-400">Total Charged</span>
+                        </div>
+                        <button
+                          onClick={() => setSelectedOrder(ord)}
+                          className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors shadow-sm"
+                        >
+                          View Details
+                        </button>
+                        {['pending_payment', 'paid', 'processing'].includes(ord.status) && (
+                          <button
+                            onClick={() => setCancelModalOrder(ord)}
+                            className="px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -807,6 +1144,185 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
               )}
             </div>
           )}
+
+          {/* PAYMENT METHODS TAB (Sprint 11) */}
+          {activeTab === 'payments' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Payment Methods</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Manage your tokenized payment cards for one-click luxury checkout.</p>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-stone-500 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+                  <Icon name="lock" className="w-4 h-4 text-emerald-600" />
+                  <span>PCI-DSS Level 1 Vault Encrypted</span>
+                </div>
+              </div>
+
+              {cardsLoading ? (
+                <div className="text-center py-12 text-sm text-gray-500">Loading saved payment methods...</div>
+              ) : savedCards.length === 0 ? (
+                <div className="text-center py-12 border-2 border-dashed border-gray-200 rounded-xl">
+                  <div className="w-12 h-12 rounded-full bg-stone-100 text-stone-600 flex items-center justify-center mx-auto mb-3">
+                    <Icon name="credit-card" className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-1">No Saved Payment Cards</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
+                    When you place an order, check "Save card for future purchases" to safely store tokenized credentials here.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {savedCards.map((card) => (
+                    <div
+                      key={card.id}
+                      className={`relative rounded-xl border p-5 transition-all ${
+                        card.is_default ? 'border-primary bg-stone-50/50 shadow-sm' : 'border-stone-200 bg-white hover:border-stone-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-7 rounded bg-stone-900 text-white flex items-center justify-center font-mono font-bold text-[10px] tracking-wider uppercase">
+                            {card.brand}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 text-sm capitalize">
+                              {card.nickname || `${card.brand} ending in ${card.last4}`}
+                            </p>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">{card.gateway.replace('_', ' ')}</p>
+                          </div>
+                        </div>
+                        {card.is_default ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            Default
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-gray-600 pt-2 border-t border-stone-100">
+                        <div>
+                          <span className="text-gray-400 block text-[10px]">EXPIRES</span>
+                          <span className="font-medium font-mono">
+                            {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {!card.is_default && (
+                            <button
+                              type="button"
+                              onClick={() => handleSetDefaultCard(card.id)}
+                              className="text-xs text-stone-600 hover:text-stone-900 font-medium px-2 py-1 rounded hover:bg-stone-100 transition-colors"
+                            >
+                              Make Default
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCard(card.id)}
+                            className="text-xs text-red-600 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* WALLET & STORE CREDIT TAB (Sprint 12) */}
+          {activeTab === 'wallet' && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Store Credit & Wallet</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Your personal platform credit ledger for seamless luxury shopping.</p>
+                </div>
+                <div className="flex items-center space-x-2 text-xs text-stone-500 bg-stone-50 border border-stone-200 px-3 py-1.5 rounded-lg">
+                  <Icon name="check" className="w-4 h-4 text-emerald-600" />
+                  <span>Double-Entry Immutable Ledger</span>
+                </div>
+              </div>
+
+              {/* Luxury Balance Card */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-stone-900 via-stone-800 to-stone-950 p-6 sm:p-8 text-white shadow-xl mb-8">
+                <div className="absolute right-0 top-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs font-semibold tracking-widest text-amber-400 uppercase">Available Store Credit</span>
+                    <div className="flex items-baseline space-x-2 mt-2">
+                      <span className="text-4xl sm:text-5xl font-extrabold tracking-tight font-serif text-white">
+                        ${wallet ? wallet.balance : '0.00'}
+                      </span>
+                      <span className="text-sm font-semibold text-stone-400">USD</span>
+                    </div>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-white/10 backdrop-blur-md text-amber-300 border border-white/10">
+                      ✓ Instant Redemption
+                    </span>
+                    <p className="text-[11px] text-stone-400 mt-2 max-w-xs">
+                      Credit is automatically eligible to offset checkout grand totals on any verified atelier order.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transactions Ledger */}
+              <div>
+                <h3 className="text-base font-bold text-gray-900 mb-4">Transaction History</h3>
+                {walletLoading ? (
+                  <div className="text-center py-12 text-sm text-gray-500">Loading wallet entries...</div>
+                ) : walletTransactions.length === 0 ? (
+                  <div className="text-center py-10 border border-dashed border-gray-200 rounded-xl">
+                    <p className="text-xs text-gray-500">No store credit transactions recorded yet.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-stone-50 text-stone-600 border-b border-stone-200">
+                        <tr>
+                          <th className="py-3 px-4 font-semibold">Date</th>
+                          <th className="py-3 px-4 font-semibold">Activity</th>
+                          <th className="py-3 px-4 font-semibold">Reference</th>
+                          <th className="py-3 px-4 font-semibold text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-stone-100">
+                        {walletTransactions.map((tx) => {
+                          const num = parseFloat(tx.amount);
+                          // In customer wallet account, credit (liability) is negative in DB, meaning +credit to user.
+                          const isCredit = num <= 0;
+                          return (
+                            <tr key={tx.id} className="hover:bg-stone-50/60 transition-colors">
+                              <td className="py-3 px-4 text-stone-500">
+                                {new Date(tx.created_at).toLocaleDateString(undefined, {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric',
+                                })}
+                              </td>
+                              <td className="py-3 px-4 font-medium text-stone-900">
+                                {tx.memo || tx.reference_type.replace('_', ' ')}
+                              </td>
+                              <td className="py-3 px-4 font-mono text-[11px] text-stone-400">
+                                {tx.reference_type}
+                              </td>
+                              <td className={`py-3 px-4 text-right font-mono font-bold ${isCredit ? 'text-emerald-600' : 'text-stone-900'}`}>
+                                {isCredit ? `+$${Math.abs(num).toFixed(2)}` : `-$${Math.abs(num).toFixed(2)}`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -932,6 +1448,49 @@ const AccountPage: React.FC<AccountPageProps> = ({ onLogout }) => {
                   className="bg-primary text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
                 >
                   {loading ? (editingAddress ? 'Saving...' : 'Validating & Saving...') : (editingAddress ? 'Save Changes' : 'Save Address')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CANCEL ORDER MODAL (Sprint 10) */}
+      {cancelModalOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">
+              Cancel Order {cancelModalOrder.order_number}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Are you sure you wish to cancel this order? The inventory holds on the atelier pieces will be released and payment refunded.
+            </p>
+            <form onSubmit={handleCancelOrder} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Reason for Cancellation</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Changed delivery destination, ordered alternate piece..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-900"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setCancelModalOrder(null); setCancelReason(''); }}
+                  className="px-4 py-2 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelling}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {cancelling ? 'Cancelling...' : 'Confirm Cancellation'}
                 </button>
               </div>
             </form>

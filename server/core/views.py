@@ -105,3 +105,114 @@ class MediaPresignedUploadView(APIView):
         )
         return Response(result)
 
+
+# ── Sprint 15: Admin Dashboard Stats, Reports & Export Views ──────────────────
+
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from core.models import ExportJob, ExportJobStatus
+from core.permissions import IsPlatformOrFinanceAdmin
+from core.serializers import (
+    AdminDashboardStatsSerializer,
+    AdminSalesReportSerializer,
+    AdminInventoryReportSerializer,
+    AdminVendorPerformanceReportSerializer,
+    ExportJobSerializer,
+    ExportRequestSerializer,
+)
+from core.services.reporting import reporting_service
+
+
+@extend_schema(tags=["Admin — Analytics & Reporting"])
+class AdminDashboardStatsView(APIView):
+    """
+    GET /admin/dashboard/stats/ — Platform-wide executive dashboard metrics (GMV, active vendors, orders today, pending payouts, ledger drift).
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def get(self, request):
+        stats = reporting_service.get_admin_dashboard_stats()
+        return Response(stats, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Admin — Analytics & Reporting"])
+class AdminReportViewSet(viewsets.ViewSet):
+    """
+    GET /admin/reports/sales/
+    GET /admin/reports/inventory/
+    GET /admin/reports/vendor-performance/
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    @action(detail=False, methods=["get"], url_path="sales")
+    def sales(self, request):
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        import datetime
+        s_date = datetime.date.fromisoformat(start_date) if start_date else None
+        e_date = datetime.date.fromisoformat(end_date) if end_date else None
+
+        report = reporting_service.get_sales_report(start_date=s_date, end_date=e_date)
+        return Response(report, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="inventory")
+    def inventory(self, request):
+        report = reporting_service.get_inventory_report()
+        return Response(report, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"], url_path="vendor-performance")
+    def vendor_performance(self, request):
+        report = reporting_service.get_vendor_performance_report()
+        return Response(report, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Admin — Exports"])
+class AdminExportView(APIView):
+    """
+    POST /admin/exports/{resource}/ — Enqueues an asynchronous CSV/JSON export job.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def post(self, request, resource):
+        serializer = ExportRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fmt = serializer.validated_data.get("format", "csv")
+
+        job = ExportJob.objects.create(
+            created_by=request.user,
+            resource=resource.lower(),
+            format=fmt,
+            status=ExportJobStatus.QUEUED,
+        )
+
+        try:
+            from core.tasks import process_export_job_task
+            process_export_job_task.delay(str(job.id))
+        except Exception:
+            reporting_service.run_export(job)
+
+        return Response(ExportJobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+
+@extend_schema(tags=["Admin — Exports"])
+class AdminExportStatusView(APIView):
+    """
+    GET /admin/exports/{resource}/{job_id}/ — Poll export job status or retrieve result data.
+    """
+    permission_classes = [IsPlatformOrFinanceAdmin]
+
+    def get(self, request, resource, job_id):
+        job = ExportJob.objects.filter(id=job_id, resource=resource.lower()).first()
+        if not job:
+            return Response(
+                {"error": {"code": "NOT_FOUND", "message": "Export job not found."}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if job.status in [ExportJobStatus.QUEUED, ExportJobStatus.PROCESSING]:
+            reporting_service.run_export(job)
+            job.refresh_from_db()
+
+        return Response(ExportJobSerializer(job).data, status=status.HTTP_200_OK)
+
+

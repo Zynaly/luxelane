@@ -43,14 +43,20 @@ LOCAL_APPS = [
     "notifications",
     # Sprint 3:
     "vendors",
-    # Added sprint-by-sprint:
-    # "catalog",
-    # "warehouse",
-    # "cart_and_pricing",
-    # "orders",
-    # "payments",
-    # "shipping",
+    # Sprint 4 & 5:
+    "catalog",
+    # Sprint 6:
+    "warehouse",
+    # Sprint 8:
+    "cart_and_pricing",
+    # Sprint 9:
+    "shipping",
+    # Sprint 10:
+    "orders",
+    # Sprint 11:
+    "payments",
 ]
+
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -188,12 +194,58 @@ SPECTACULAR_SETTINGS = {
     "CONTACT": {"name": "LuxeLane Engineering"},
 }
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
+# ── CORS & Security ───────────────────────────────────────────────────────────
+from corsheaders.defaults import default_headers, default_methods
+
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:5173", "http://localhost:3000"],
+    default=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
 )
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-session-key",
+    "idempotency-key",
+    "x-idempotency-key",
+    "cache-control",
+    "pragma",
+    "origin",
+    "accept-encoding",
+    "dnt",
+    "x-forwarded-for",
+    "x-forwarded-proto",
+]
+CORS_ALLOW_METHODS = list(default_methods) + [
+    "OPTIONS",
+]
+CORS_EXPOSE_HEADERS = [
+    "Content-Type",
+    "X-CSRFToken",
+    "Idempotency-Key",
+    "X-Idempotency-Key",
+    "X-Session-Key",
+]
+
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+)
+
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 # ── Static / Media ───────────────────────────────────────────────────────────
 STATIC_URL = "/static/"
@@ -218,6 +270,12 @@ SHIPPING_PROVIDER = env("SHIPPING_PROVIDER", default="fake")  # fake | easypost 
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
 STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+
+# ── Authorize.Net ─────────────────────────────────────────────────────────────
+AUTHORIZENET_API_LOGIN_ID = env("AUTHORIZENET_API_LOGIN_ID", default="")
+AUTHORIZENET_TRANSACTION_KEY = env("AUTHORIZENET_TRANSACTION_KEY", default="")
+AUTHORIZENET_SIGNATURE_KEY = env("AUTHORIZENET_SIGNATURE_KEY", default="")
+AUTHORIZENET_ENVIRONMENT = env("AUTHORIZENET_ENVIRONMENT", default="SANDBOX")
 
 # ── EasyPost / Shippo ─────────────────────────────────────────────────────────
 EASYPOST_API_KEY = env("EASYPOST_API_KEY", default="")
