@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Image, RefreshControl,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { Button, EmptyState, Divider } from '../components/ui';
 import { CartAPI, Cart, CartItem, TokenService } from '../services/api';
@@ -16,18 +17,18 @@ interface CartScreenProps {
 const DEFAULT_PRODUCT_IMAGE = require('../../assets/product_placeholder.jpg');
 
 const getItemName = (item: CartItem): string => {
-  return item.variant?.product?.name || (item.product as any)?.name || 'Product';
+  return item.product_title || item.product_name || item.variant?.product?.name || (item.product as any)?.name || (item.product as any)?.title || item.variant_sku || 'Luxury Item';
 };
 const getItemImageSource = (item: CartItem): any => {
-  const uri = item.variant?.product?.primary_image || (item.product as any)?.primary_image;
+  const uri = item.product_image || (item.product as any)?.primary_image || item.variant?.product?.primary_image;
   if (uri && (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('file://'))) {
     return { uri };
   }
   return DEFAULT_PRODUCT_IMAGE;
 };
 const getItemPrice = (item: CartItem): number => {
-  const raw = item.unit_price || item.variant?.price || '0';
-  return parseFloat(raw);
+  const raw = item.current_price || item.unit_price || item.price_snapshot || item.variant?.price || '0';
+  return parseFloat(raw) || 0;
 };
 
 export const CartScreen: React.FC<CartScreenProps> = ({ onNavigateShop, onNavigateAccount, onCartCountChange }) => {
@@ -57,6 +58,12 @@ export const CartScreen: React.FC<CartScreenProps> = ({ onNavigateShop, onNaviga
   }, [onCartCountChange]);
 
   useEffect(() => { loadCart(); }, [loadCart]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCart();
+    }, [loadCart])
+  );
 
   const handleUpdateQty = async (item: CartItem, delta: number) => {
     const newQty = item.quantity + delta;
@@ -137,10 +144,10 @@ export const CartScreen: React.FC<CartScreenProps> = ({ onNavigateShop, onNaviga
   }
 
   const items = cart?.items || [];
-  const subtotal = parseFloat(cart?.subtotal || '0');
-  const discount = parseFloat(cart?.discount_amount || '0');
-  const shipping = subtotal >= 50 ? 0 : 9.99;
-  const total = subtotal - discount + shipping;
+  const subtotal = parseFloat(cart?.subtotal || cart?.price_breakdown?.subtotal || '0');
+  const discount = parseFloat(cart?.discount_amount || cart?.price_breakdown?.discount_total || '0');
+  const shipping = items.length === 0 ? 0 : (subtotal >= 50 ? 0 : 9.99);
+  const total = parseFloat(cart?.grand_total || cart?.price_breakdown?.grand_total || '0') || Math.max(0, subtotal - discount + shipping);
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.bgPrimary }}>
@@ -178,6 +185,9 @@ export const CartScreen: React.FC<CartScreenProps> = ({ onNavigateShop, onNaviga
                   />
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName} numberOfLines={2}>{getItemName(item)}</Text>
+                    {(item.variant_name || item.variant_sku) ? (
+                      <Text style={styles.itemVariantText} numberOfLines={1}>{item.variant_name || `SKU: ${item.variant_sku}`}</Text>
+                    ) : null}
                     <Text style={styles.itemPrice}>${getItemPrice(item).toFixed(2)}</Text>
                     <View style={styles.qtyRow}>
                       <TouchableOpacity
@@ -324,8 +334,9 @@ const styles = StyleSheet.create({
     borderRadius: Radii.md,
     backgroundColor: Colors.bgSubtle,
   },
-  itemInfo: { flex: 1, gap: 6 },
+  itemInfo: { flex: 1, gap: 4 },
   itemName: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary, lineHeight: 19 },
+  itemVariantText: { fontSize: 12, color: Colors.accent, fontWeight: '500' },
   itemPrice: { fontSize: 13, color: Colors.textMuted },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   qtyBtn: {

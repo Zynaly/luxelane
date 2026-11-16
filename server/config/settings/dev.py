@@ -34,6 +34,10 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://10.0.2.2:8000",
     "http://10.0.2.2:5173",
+    "http://192.168.1.10:8000",
+    "http://192.168.1.10:8081",
+    "http://192.168.1.10:8082",
+    "http://192.168.1.10:5173",
 ]
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:\d+$",

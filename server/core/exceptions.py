@@ -41,11 +41,34 @@ def custom_exception_handler(exc, context):
     code = getattr(exc, "default_code", None) or _STATUS_CODE_MAP.get(response.status_code, "ERROR")
     code = code.upper().replace("-", "_")
 
-    # Extract a human-readable message
-    if isinstance(data, dict) and "detail" in data:
-        message = str(data["detail"])
+    # Extract a clean, human-readable message
+    if isinstance(data, dict):
+        if "detail" in data:
+            message = str(data["detail"])
+        elif "non_field_errors" in data and data["non_field_errors"]:
+            first = data["non_field_errors"]
+            message = str(first[0] if isinstance(first, list) else first)
+        else:
+            # Extract first user-friendly message from field errors
+            first_messages = []
+            for field, errs in data.items():
+                if field == "detail":
+                    continue
+                if isinstance(errs, list) and errs:
+                    first_messages.append(str(errs[0]))
+                elif isinstance(errs, str):
+                    first_messages.append(errs)
+                elif isinstance(errs, dict):
+                    for sub_err in errs.values():
+                        if isinstance(sub_err, list) and sub_err:
+                            first_messages.append(str(sub_err[0]))
+                            break
+                        elif isinstance(sub_err, str):
+                            first_messages.append(sub_err)
+                            break
+            message = first_messages[0] if first_messages else "Invalid input. Please verify your entries."
     elif isinstance(data, list):
-        message = str(data[0]) if data else "Error"
+        message = str(data[0]) if data else "An error occurred."
     else:
         message = str(data)
 

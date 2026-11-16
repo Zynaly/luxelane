@@ -1,14 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
-  ActivityIndicator, Alert, RefreshControl, Platform,
+  ActivityIndicator, Alert, RefreshControl, Platform, Modal,
 } from 'react-native';
 import { Colors, Radii, Shadows } from '../theme/colors';
 import { Button, Badge, Card, Divider, EmptyState, SectionHeader } from '../components/ui';
 import {
   AuthAPI, ProfileAPI, OrderAPI, AddressAPI,
   TokenService, API_BASE_URL, setApiBaseUrl,
+  cleanRawErrorString,
 } from '../services/api';
+import {
+  COUNTRY_DIAL_CODES, CountryDialCode,
+  normalizePhone, validatePhone, validateEmail,
+  validatePassword, validateName,
+} from '../utils/validation';
 
 interface AccountScreenProps {
   onNavigateShop?: () => void;
@@ -33,7 +39,27 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
   const [regLastName, setRegLastName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPhone, setRegPhone] = useState('');
+  const [selectedCountryCode, setSelectedCountryCode] = useState('+1');
+  const [showCountryModal, setShowCountryModal] = useState(false);
   const [regPassword, setRegPassword] = useState('');
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+
+  // Field validation computations
+  const firstNameValidation = validateName(regFirstName, 'First name');
+  const lastNameValidation = validateName(regLastName, 'Last name');
+  const emailValidation = validateEmail(regEmail);
+  const phoneValidation = validatePhone(regPhone, selectedCountryCode);
+  const passwordValidation = validatePassword(regPassword);
+
+  const isRegisterFormValid =
+    firstNameValidation.isValid &&
+    lastNameValidation.isValid &&
+    emailValidation.isValid &&
+    phoneValidation.isValid &&
+    passwordValidation.isValid;
+
+  const selectedCountry =
+    COUNTRY_DIAL_CODES.find((c) => c.code === selectedCountryCode) || COUNTRY_DIAL_CODES[0];
 
   // OTP Verification state
   const [awaitingOtp, setAwaitingOtp] = useState(false);
@@ -140,26 +166,46 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
       setIsLoggedIn(true);
       setLoginPassword('');
     } catch (e: any) {
-      setAuthError(e?.message || 'Login failed. Please check your credentials.');
+      const clean = cleanRawErrorString(e?.message || 'Login failed. Please check your credentials.');
+      setAuthError(clean);
     } finally {
       setAuthLoading(false);
     }
   };
 
   const handleRegister = async () => {
-    if (!regEmail.trim() || !regPassword || !regFirstName.trim() || !regLastName.trim()) {
-      setAuthError('Please fill in all required fields.');
+    // Touch all fields to reveal inline validation states
+    setTouchedFields({
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      password: true,
+    });
+
+    if (!isRegisterFormValid) {
+      if (!firstNameValidation.isValid) setAuthError(firstNameValidation.message);
+      else if (!lastNameValidation.isValid) setAuthError(lastNameValidation.message);
+      else if (!emailValidation.isValid) setAuthError(emailValidation.message);
+      else if (!phoneValidation.isValid) setAuthError(phoneValidation.message);
+      else if (!passwordValidation.isValid) setAuthError(passwordValidation.message);
+      else setAuthError('Please complete all required fields correctly.');
       return;
     }
+
     setAuthLoading(true);
     setAuthError(null);
     try {
+      const normalizedPhone = regPhone.trim()
+        ? normalizePhone(regPhone, selectedCountryCode)
+        : undefined;
+
       await AuthAPI.register({
         email: regEmail.trim(),
         password: regPassword,
         first_name: regFirstName.trim(),
         last_name: regLastName.trim(),
-        phone: regPhone.trim() || undefined,
+        phone: normalizedPhone,
       });
 
       // Automatically sign in upon registration
@@ -179,7 +225,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
         Alert.alert('Account Created', 'Your account was created! Please enter your password to sign in.');
       }
     } catch (e: any) {
-      setAuthError(e?.message || 'Registration failed. Please check your details.');
+      const clean = cleanRawErrorString(e?.message || 'Registration failed. Please check your details.');
+      setAuthError(clean);
     } finally {
       setAuthLoading(false);
     }
@@ -203,7 +250,8 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
       setActiveAuthTab('login');
       setLoginEmail(regEmail);
     } catch (e: any) {
-      setAuthError(e?.message || 'Verification failed.');
+      const clean = cleanRawErrorString(e?.message || 'Verification failed. Please check the code.');
+      setAuthError(clean);
     } finally {
       setAuthLoading(false);
     }
@@ -280,7 +328,15 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
               We sent a verification code to {otpDestination}
             </Text>
 
-            {authError && <Text style={styles.errorText}>{authError}</Text>}
+            {authError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorIcon}>✕</Text>
+                <Text style={styles.errorText}>{cleanRawErrorString(authError)}</Text>
+                <TouchableOpacity onPress={() => setAuthError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.errorDismiss}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <Text style={styles.inputLabel}>Verification Code</Text>
             <TextInput
@@ -338,7 +394,15 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
               </TouchableOpacity>
             </View>
 
-            {authError && <Text style={styles.errorText}>{authError}</Text>}
+            {authError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorIcon}>✕</Text>
+                <Text style={styles.errorText}>{cleanRawErrorString(authError)}</Text>
+                <TouchableOpacity onPress={() => setAuthError(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.errorDismiss}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {activeAuthTab === 'login' ? (
               <View style={styles.fieldsContainer}>
@@ -378,61 +442,140 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
                   <View style={{ flex: 1 }}>
                     <Text style={styles.inputLabel}>First Name</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[
+                        styles.input,
+                        touchedFields.firstName && !firstNameValidation.isValid && styles.inputError,
+                      ]}
                       placeholder="Jane"
                       placeholderTextColor={Colors.textMuted}
                       value={regFirstName}
-                      onChangeText={setRegFirstName}
+                      onChangeText={(text) => {
+                        setRegFirstName(text);
+                        setTouchedFields((prev) => ({ ...prev, firstName: true }));
+                      }}
+                      onBlur={() => setTouchedFields((prev) => ({ ...prev, firstName: true }))}
                     />
+                    {touchedFields.firstName && !firstNameValidation.isValid && (
+                      <Text style={styles.fieldError}>{firstNameValidation.message}</Text>
+                    )}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.inputLabel}>Last Name</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[
+                        styles.input,
+                        touchedFields.lastName && !lastNameValidation.isValid && styles.inputError,
+                      ]}
                       placeholder="Doe"
                       placeholderTextColor={Colors.textMuted}
                       value={regLastName}
-                      onChangeText={setRegLastName}
+                      onChangeText={(text) => {
+                        setRegLastName(text);
+                        setTouchedFields((prev) => ({ ...prev, lastName: true }));
+                      }}
+                      onBlur={() => setTouchedFields((prev) => ({ ...prev, lastName: true }))}
                     />
+                    {touchedFields.lastName && !lastNameValidation.isValid && (
+                      <Text style={styles.fieldError}>{lastNameValidation.message}</Text>
+                    )}
                   </View>
                 </View>
 
                 <Text style={styles.inputLabel}>Email Address</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    touchedFields.email && !emailValidation.isValid && styles.inputError,
+                  ]}
                   placeholder="jane.doe@example.com"
                   placeholderTextColor={Colors.textMuted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={regEmail}
-                  onChangeText={setRegEmail}
+                  onChangeText={(text) => {
+                    setRegEmail(text);
+                    setTouchedFields((prev) => ({ ...prev, email: true }));
+                  }}
+                  onBlur={() => setTouchedFields((prev) => ({ ...prev, email: true }))}
                 />
+                {touchedFields.email && !emailValidation.isValid && (
+                  <Text style={styles.fieldError}>{emailValidation.message}</Text>
+                )}
+                {regEmail.trim().length > 0 && emailValidation.isValid && (
+                  <Text style={styles.fieldSuccess}>✓ Valid email address</Text>
+                )}
 
-                <Text style={styles.inputLabel}>Phone (Optional)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="+1 (555) 000-0000"
-                  placeholderTextColor={Colors.textMuted}
-                  keyboardType="phone-pad"
-                  value={regPhone}
-                  onChangeText={setRegPhone}
-                />
+                <Text style={styles.inputLabel}>
+                  Phone Number <Text style={styles.optionalLabel}>(Optional)</Text>
+                </Text>
+                <View style={styles.phoneInputRow}>
+                  <TouchableOpacity
+                    style={styles.countryPickerBtn}
+                    onPress={() => setShowCountryModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.countryPickerFlag}>
+                      {selectedCountry.flag} {selectedCountry.code}
+                    </Text>
+                    <Text style={styles.countryPickerArrow}>▾</Text>
+                  </TouchableOpacity>
+                  <TextInput
+                    style={[
+                      styles.phoneInput,
+                      regPhone.trim().length > 0 && !phoneValidation.isValid && styles.inputError,
+                    ]}
+                    placeholder="300 1234567"
+                    placeholderTextColor={Colors.textMuted}
+                    keyboardType="phone-pad"
+                    value={regPhone}
+                    onChangeText={(text) => {
+                      const filtered = text.replace(/[^\d+\s\-()]/g, '');
+                      setRegPhone(filtered);
+                      setTouchedFields((prev) => ({ ...prev, phone: true }));
+                    }}
+                    onBlur={() => setTouchedFields((prev) => ({ ...prev, phone: true }))}
+                  />
+                </View>
+                {regPhone.trim().length > 0 && (
+                  <Text style={phoneValidation.isValid ? styles.fieldSuccess : styles.fieldError}>
+                    {phoneValidation.isValid ? `✓ ${phoneValidation.message}` : `⚠️ ${phoneValidation.message}`}
+                  </Text>
+                )}
 
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    touchedFields.password && !passwordValidation.isValid && styles.inputError,
+                  ]}
                   placeholder="Min. 8 characters"
                   placeholderTextColor={Colors.textMuted}
                   secureTextEntry
                   value={regPassword}
-                  onChangeText={setRegPassword}
+                  onChangeText={(text) => {
+                    setRegPassword(text);
+                    setTouchedFields((prev) => ({ ...prev, password: true }));
+                  }}
+                  onBlur={() => setTouchedFields((prev) => ({ ...prev, password: true }))}
                 />
+                {touchedFields.password && !passwordValidation.isValid && (
+                  <Text style={styles.fieldError}>{passwordValidation.message}</Text>
+                )}
+                {regPassword.length >= 8 && (
+                  <Text style={styles.fieldSuccess}>✓ Password strength verified (8+ characters)</Text>
+                )}
 
                 <View style={{ marginTop: 20 }}>
+                  {!isRegisterFormValid && (
+                    <Text style={styles.formIncompleteHint}>
+                      Please complete all required fields correctly to proceed
+                    </Text>
+                  )}
                   <Button
                     label="Create Account"
                     onPress={handleRegister}
                     loading={authLoading}
+                    disabled={!isRegisterFormValid}
                     fullWidth
                   />
                 </View>
@@ -478,6 +621,47 @@ export const AccountScreen: React.FC<AccountScreenProps> = ({ onNavigateShop, in
             </Text>
           )}
         </Card>
+
+        {/* Country Selector Modal */}
+        <Modal
+          visible={showCountryModal}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowCountryModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.countryModalContent}>
+              <View style={styles.countryModalHeader}>
+                <Text style={styles.countryModalTitle}>Select Country Code</Text>
+                <TouchableOpacity
+                  onPress={() => setShowCountryModal(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.modalCloseBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 350 }}>
+                {COUNTRY_DIAL_CODES.map((c) => (
+                  <TouchableOpacity
+                    key={c.code + c.country}
+                    style={[
+                      styles.countryItem,
+                      selectedCountryCode === c.code && styles.countryItemSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedCountryCode(c.code);
+                      setShowCountryModal(false);
+                    }}
+                  >
+                    <Text style={styles.countryItemFlag}>{c.flag}</Text>
+                    <Text style={styles.countryItemName}>{c.country}</Text>
+                    <Text style={styles.countryItemCode}>{c.code}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     );
   }
@@ -802,13 +986,160 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textPrimary,
   },
-  errorText: {
+  optionalLabel: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    fontWeight: '400',
+    textTransform: 'none',
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  countryPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.md,
+    paddingHorizontal: 10,
+    height: 44,
+    gap: 4,
+  },
+  countryPickerFlag: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  countryPickerArrow: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginLeft: 2,
+  },
+  phoneInput: {
+    flex: 1,
+    backgroundColor: Colors.bgSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: Radii.md,
+    paddingHorizontal: 14,
+    height: 44,
+    fontSize: 15,
+    color: Colors.textPrimary,
+  },
+  inputError: {
+    borderColor: Colors.error,
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+  },
+  fieldError: {
     color: Colors.error,
-    backgroundColor: Colors.errorBg,
-    padding: 10,
+    fontSize: 12,
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  fieldSuccess: {
+    color: Colors.success,
+    fontSize: 12,
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  formIncompleteHint: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 8,
+    fontStyle: 'italic',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  countryModalContent: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: Radii.xl,
+    borderTopRightRadius: Radii.xl,
+    padding: 20,
+    maxHeight: '60%',
+    ...Shadows.lifted,
+  },
+  countryModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    marginBottom: 8,
+  },
+  countryModalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    fontFamily: 'Georgia',
+  },
+  modalCloseBtn: {
+    fontSize: 18,
+    color: Colors.textMuted,
+    padding: 4,
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: Colors.border,
+  },
+  countryItemSelected: {
+    backgroundColor: Colors.accentBg,
     borderRadius: Radii.sm,
+  },
+  countryItemFlag: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  countryItemName: {
+    flex: 1,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  countryItemCode: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.accent,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radii.md,
+    marginBottom: 14,
+  },
+  errorIcon: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+    marginRight: 8,
+  },
+  errorText: {
+    flex: 1,
+    color: '#F87171',
     fontSize: 13,
-    marginBottom: 12,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  errorDismiss: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 13,
+    paddingLeft: 8,
   },
   formTitle: {
     fontFamily: 'Georgia',

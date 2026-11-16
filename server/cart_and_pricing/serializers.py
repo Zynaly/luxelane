@@ -32,21 +32,46 @@ class CartItemUpdateSerializer(serializers.Serializer):
 class CartItemSerializer(serializers.ModelSerializer):
     variant_sku    = serializers.CharField(source="variant.sku", read_only=True)
     product_title  = serializers.CharField(source="variant.product.title", read_only=True)
+    product_name   = serializers.CharField(source="variant.product.title", read_only=True)
     product_id     = serializers.CharField(source="variant.product.id", read_only=True)
+    product_image  = serializers.SerializerMethodField()
+    unit_price     = serializers.CharField(source="price_snapshot", read_only=True)
     current_price  = serializers.CharField(source="variant.price", read_only=True)
+    variant_name   = serializers.SerializerMethodField()
     line_subtotal  = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
         fields = [
-            "id", "variant", "variant_sku", "product_title", "product_id",
-            "quantity", "price_snapshot", "current_price", "line_subtotal",
+            "id", "variant", "variant_sku", "product_title", "product_name",
+            "product_id", "product_image", "unit_price",
+            "quantity", "price_snapshot", "current_price", "variant_name", "line_subtotal",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "price_snapshot", "created_at", "updated_at"]
 
     def get_line_subtotal(self, obj) -> str:
         return str(obj.line_subtotal)
+
+    def get_product_image(self, obj) -> str | None:
+        if not obj.variant:
+            return None
+        var_img = obj.variant.images.filter(is_deleted=False).first()
+        if var_img and var_img.image_url:
+            return var_img.image_url
+        if obj.variant.product:
+            prod_img = obj.variant.product.images.filter(is_primary=True, is_deleted=False).first()
+            if not prod_img:
+                prod_img = obj.variant.product.images.filter(is_deleted=False).first()
+            if prod_img and prod_img.image_url:
+                return prod_img.image_url
+        return None
+
+    def get_variant_name(self, obj) -> str:
+        if not obj.variant:
+            return ""
+        attrs = [f"{a.attribute_value.attribute.name}: {a.attribute_value.value}" for a in obj.variant.variant_attributes.all()]
+        return ", ".join(attrs) if attrs else (obj.variant.sku or "")
 
 
 # ── Pricing Breakdown ─────────────────────────────────────────────────────────
@@ -106,14 +131,19 @@ class CartSerializer(serializers.ModelSerializer):
     items               = CartItemSerializer(many=True, read_only=True)
     applied_coupon_code = serializers.CharField(source="applied_coupon.code", read_only=True, allow_null=True, default=None)
     price_breakdown     = serializers.SerializerMethodField()
-
+    subtotal            = serializers.SerializerMethodField()
+    item_count          = serializers.SerializerMethodField()
+    discount_amount     = serializers.SerializerMethodField()
+    grand_total         = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
         fields = [
             "id", "user", "session_key", "status",
             "applied_coupon", "applied_coupon_code",
-            "items", "price_breakdown", "created_at", "updated_at",
+            "items", "price_breakdown",
+            "subtotal", "item_count", "discount_amount", "grand_total",
+            "created_at", "updated_at",
         ]
         read_only_fields = fields
 
@@ -121,6 +151,22 @@ class CartSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
         return pricing_service.calculate(obj, user=user)
+
+    def get_subtotal(self, obj) -> str:
+        bd = self.get_price_breakdown(obj)
+        return str(bd.get("subtotal", "0.00"))
+
+    def get_item_count(self, obj) -> int:
+        bd = self.get_price_breakdown(obj)
+        return int(bd.get("item_count", 0))
+
+    def get_discount_amount(self, obj) -> str:
+        bd = self.get_price_breakdown(obj)
+        return str(bd.get("discount_total", "0.00"))
+
+    def get_grand_total(self, obj) -> str:
+        bd = self.get_price_breakdown(obj)
+        return str(bd.get("grand_total", "0.00"))
 
 
 # ── Cart Validation & Tax Quote Serializers ───────────────────────────────────

@@ -12,7 +12,7 @@ from rest_framework.exceptions import ValidationError
 from drf_spectacular.utils import extend_schema
 
 from core.permissions import IsPlatformAdmin
-from catalog.models import ProductVariant
+from catalog.models import ProductVariant, Product
 from cart_and_pricing.models import Cart, CartItem, CartStatus, Coupon, TaxRate, DiscountType
 from cart_and_pricing.services import cart as cart_service
 from cart_and_pricing.services import pricing as pricing_service
@@ -68,7 +68,15 @@ class CartItemViewSet(mixins.CreateModelMixin, mixins.UpdateModelMixin, mixins.D
 
         data = serializer.validated_data
         cart = cart_service.get_or_create_cart(request)
-        variant = get_object_or_404(ProductVariant, id=data["variant_id"], is_deleted=False)
+        variant_id = data["variant_id"]
+        variant = ProductVariant.objects.filter(id=variant_id, is_deleted=False).first()
+        if not variant:
+            # Fallback: check if the client provided a Product ID instead of ProductVariant ID
+            prod = Product.objects.filter(id=variant_id, is_deleted=False).first()
+            if prod:
+                variant = prod.variants.filter(is_active=True, is_deleted=False).first()
+        if not variant:
+            raise ValidationError({"variant_id": "The requested product or variant was not found."})
 
         if not variant.is_active or not (variant.product and variant.product.is_active):
             raise ValidationError({"variant_id": "This product variant is currently inactive or unapproved."})

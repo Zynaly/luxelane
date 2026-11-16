@@ -388,3 +388,43 @@ export function getCountryPhoneInfo(countryNameOrCode: string): { phone_code: st
   return { phone_code, phone_digits, max_length };
 }
 
+/**
+ * Normalizes any phone input into strict E.164 format (+[country_code][digits]).
+ */
+export function normalizePhone(raw: string, defaultCode: string = '+1'): string {
+  if (!raw) return '';
+  let cleaned = String(raw).trim().replace(/[\s\(\)\-\.]/g, '');
+
+  if (cleaned.startsWith('00')) {
+    cleaned = '+' + cleaned.slice(2);
+  }
+
+  if (cleaned.startsWith('+')) {
+    const digits = cleaned.slice(1).replace(/\D/g, '');
+    return '+' + digits;
+  }
+
+  cleaned = cleaned.replace(/\D/g, '');
+  if (!cleaned) return '';
+
+  if (cleaned.length === 11 && cleaned.startsWith('03')) {
+    return '+92' + cleaned.slice(1);
+  }
+  if (cleaned.length === 11 && cleaned.startsWith('07')) {
+    return '+44' + cleaned.slice(1);
+  }
+  if (cleaned.length === 10) {
+    const code = defaultCode.startsWith('+') ? defaultCode : `+${defaultCode}`;
+    return code + cleaned;
+  }
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return '+' + cleaned;
+  }
+  if (cleaned.length >= 8 && cleaned.length <= 15) {
+    const code = defaultCode.startsWith('+') ? defaultCode : `+${defaultCode}`;
+    return code + cleaned;
+  }
+
+  return '+' + cleaned;
+}
+

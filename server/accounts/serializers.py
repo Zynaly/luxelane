@@ -16,10 +16,48 @@ from accounts.services import otp as otp_service
 E164_RE = re.compile(r"^\+[1-9]\d{1,14}$")
 
 
+def normalize_phone_to_e164(phone: str) -> str:
+    """
+    Cleans and normalizes phone numbers into E.164 standard format.
+    - Strips spaces, dashes, parentheses, dots.
+    - Converts '00' prefix to '+'.
+    - Auto-formats national prefixes (e.g. 03xx in PK -> +923xx, 07xx in UK -> +447xx, 10-digit US -> +1xx).
+    - If digits only with 8-15 chars without '+', prefixes '+'.
+    """
+    if not phone:
+        return ""
+    cleaned = str(phone).strip()
+    cleaned = re.sub(r"[\s\(\)\-\.]", "", cleaned)
+
+    if cleaned.startswith("00"):
+        cleaned = "+" + cleaned[2:]
+
+    if not cleaned.startswith("+"):
+        if len(cleaned) == 11 and cleaned.startswith("03"):
+            cleaned = "+92" + cleaned[1:]
+        elif len(cleaned) == 11 and cleaned.startswith("07"):
+            cleaned = "+44" + cleaned[1:]
+        elif len(cleaned) == 11 and cleaned.startswith("1"):
+            cleaned = "+" + cleaned
+        elif len(cleaned) == 10 and cleaned[0] != "0":
+            cleaned = "+1" + cleaned
+        elif 8 <= len(cleaned) <= 15:
+            cleaned = "+" + cleaned
+
+    return cleaned
+
+
+def normalize_and_validate_e164(phone: str) -> str:
+    if not phone:
+        return ""
+    cleaned = normalize_phone_to_e164(phone)
+    if not E164_RE.match(cleaned):
+        raise serializers.ValidationError("Phone must be in international E.164 format, e.g. +12125551234 or +923001234567")
+    return cleaned
+
+
 def _validate_e164(phone: str):
-    if not E164_RE.match(phone):
-        raise serializers.ValidationError("Phone must be in E.164 format, e.g. +12125551234")
-    return phone
+    return normalize_and_validate_e164(phone)
 
 
 # ── Register ──────────────────────────────────────────────────────────────────
@@ -36,7 +74,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         if not data.get("email") and not data.get("phone"):
             raise serializers.ValidationError("At least one of email or phone is required.")
         if data.get("phone"):
-            _validate_e164(data["phone"])
+            data["phone"] = normalize_and_validate_e164(data["phone"])
         validate_password(data["password"])
         return data
 
@@ -122,9 +160,14 @@ class LoginSerializer(TokenObtainPairSerializer):
             except User.DoesNotExist:
                 raise serializers.ValidationError({"email_or_phone": "No account found."})
         else:
-            try:
-                user = User.objects.get(phone=email_or_phone)
-            except User.DoesNotExist:
+            norm_phone = normalize_phone_to_e164(email_or_phone)
+            user = None
+            for cand in [norm_phone, email_or_phone]:
+                if cand:
+                    user = User.objects.filter(phone=cand).first()
+                    if user:
+                        break
+            if not user:
                 raise serializers.ValidationError({"email_or_phone": "No account found."})
 
         if not user.check_password(password):
@@ -153,7 +196,7 @@ class OTPRequestSerializer(serializers.Serializer):
     def validate_destination(self, value):
         value = value.strip()
         if "@" not in value:
-            _validate_e164(value)
+            value = normalize_and_validate_e164(value)
         return value
 
 

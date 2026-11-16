@@ -45,8 +45,10 @@ export const getProductName = (p: Product): string => {
 
 export const getProductVariantId = (p: Product): string => {
   if (p.primary_variant_id) return String(p.primary_variant_id);
-  if (p.variants && p.variants.length > 0 && p.variants[0].id) {
-    return String(p.variants[0].id);
+  if (p.variants && p.variants.length > 0) {
+    const first: any = p.variants[0];
+    if (typeof first === 'object' && first?.id) return String(first.id);
+    if (typeof first === 'string' && first.length > 0) return String(first);
   }
   return String(p.id);
 };

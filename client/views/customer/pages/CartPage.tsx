@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import API, { Cart, CartItem, Coupon, CartValidationResult, RateQuote, Order } from '../../../services/api';
 import { Icon } from '../../../components/Icon';
+import { normalizePhone } from '../../../services/countryData';
 
 interface CartPageProps {
   onNavigate?: (page: 'home' | 'shop' | 'about' | 'contact' | 'cart' | 'account') => void;
@@ -264,7 +265,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate, onCartChange }) 
           country: checkoutForm.country,
         },
         guest_email: checkoutForm.email,
-        guest_phone: checkoutForm.phone,
+        guest_phone: checkoutForm.phone ? normalizePhone(checkoutForm.phone) : undefined,
         payment_method: checkoutForm.payment_method,
         idempotency_key: idempotencyKey,
       });

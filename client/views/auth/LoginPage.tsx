@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Icon } from '../../components/Icon';
-import API from '../../services/api';
+import API, { cleanRawErrorString } from '../../services/api';
 import {
   loadWorldCountries,
   searchCountries,
@@ -97,6 +97,14 @@ const LoginPage: React.FC<LoginPageProps> = ({
   // Form validation errors and touched state
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const hasSignupErrors = Object.values(errors).some((err) => !!err);
+  const isSignupIncomplete =
+    !signupData.name.trim() ||
+    !signupData.email.trim() ||
+    !signupData.password ||
+    signupData.password.length < 8 ||
+    (signupRole === 'vendor' && (!signupData.legal_name.trim() || !signupData.display_name.trim()));
 
   // Country & State dropdown states
   const [countryQuery, setCountryQuery] = useState('United States');
@@ -543,7 +551,9 @@ const LoginPage: React.FC<LoginPageProps> = ({
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
+      const cleanMsg = cleanRawErrorString(err.message || 'Login failed. Please check your credentials.');
+      setToast({ type: 'error', message: cleanMsg });
+      setError(cleanMsg);
     } finally {
       setLoading(false);
     }
@@ -639,7 +649,7 @@ const LoginPage: React.FC<LoginPageProps> = ({
       setResendCooldown(60);
     } catch (err: any) {
       console.error('Signup error:', err);
-      const errMsg = err.message || 'Signup failed. Please try again.';
+      const errMsg = cleanRawErrorString(err.message || 'Signup failed. Please try again.');
       setError(errMsg);
       setToast({ type: 'error', message: errMsg });
     } finally {
@@ -1043,11 +1053,22 @@ const LoginPage: React.FC<LoginPageProps> = ({
                 </div>
               )}
 
-              {/* Feedback messages */}
+              {/* Feedback messages — Dismissible Luxury Toast Alert */}
               {error && (
-                <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm flex items-start">
-                  <Icon name="x" className="w-5 h-5 mr-2 text-red-500 flex-shrink-0 mt-0.5" />
-                  <span>{error}</span>
+                <div className="mb-5 p-3.5 bg-red-50 border border-red-200/80 text-red-800 rounded-2xl text-sm flex items-start justify-between shadow-sm animate-fade-in">
+                  <div className="flex items-start space-x-2.5">
+                    <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center text-red-600 text-xs font-bold mt-0.5 flex-shrink-0">
+                      ✕
+                    </div>
+                    <span className="font-medium text-red-800 leading-snug">{cleanRawErrorString(error)}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setError('')}
+                    className="text-red-400 hover:text-red-700 p-0.5 ml-2 rounded transition-colors"
+                  >
+                    <Icon name="x" className="w-4 h-4" />
+                  </button>
                 </div>
               )}
               {success && (
@@ -1811,9 +1832,14 @@ const LoginPage: React.FC<LoginPageProps> = ({
 
               {/* Submit Button */}
               <div className="pt-2">
+                {(hasSignupErrors || isSignupIncomplete) && (
+                  <p className="text-xs text-stone-400 text-center mb-2 italic">
+                    Please complete all required fields correctly before submitting
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || hasSignupErrors || isSignupIncomplete}
                   className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-semibold text-white bg-primary hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all transform active:scale-[0.99]"
                 >
                   {loading

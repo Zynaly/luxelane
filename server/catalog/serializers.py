@@ -289,23 +289,41 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     """Full serializer for public product detail view including variants."""
-    images        = ProductImageSerializer(many=True, read_only=True)
-    tags          = ProductTagSerializer(many=True, read_only=True)
-    variants      = ProductVariantSerializer(many=True, read_only=True)
-    vendor_info   = serializers.SerializerMethodField()
-    category_info = serializers.SerializerMethodField()
-    brand_info    = serializers.SerializerMethodField()
+    images              = ProductImageSerializer(many=True, read_only=True)
+    tags                = ProductTagSerializer(many=True, read_only=True)
+    variants            = ProductVariantSerializer(many=True, read_only=True)
+    primary_image       = serializers.SerializerMethodField()
+    primary_variant_id  = serializers.SerializerMethodField()
+    category_name       = serializers.CharField(source="category.name", read_only=True)
+    brand_name          = serializers.SerializerMethodField()
+    vendor_info         = serializers.SerializerMethodField()
+    category_info       = serializers.SerializerMethodField()
+    brand_info          = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
             "id", "title", "slug", "description", "base_price",
+            "primary_image", "primary_variant_id", "category_name", "brand_name",
             "status", "is_active",
             "rating_avg", "rating_count",
             "images", "tags", "variants",
             "vendor_info", "category_info", "brand_info",
             "created_at", "updated_at",
         ]
+
+    def get_primary_image(self, obj):
+        img = obj.images.filter(is_primary=True, is_deleted=False).first()
+        if not img:
+            img = obj.images.filter(is_deleted=False).first()
+        return img.image_url if img else None
+
+    def get_primary_variant_id(self, obj):
+        var = obj.variants.filter(is_active=True, is_deleted=False).first()
+        return str(var.id) if var else None
+
+    def get_brand_name(self, obj):
+        return obj.brand.name if obj.brand else None
 
     def get_vendor_info(self, obj):
         return {

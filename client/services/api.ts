@@ -1,4 +1,5 @@
 // API Service for LuxeLane Django Backend Integration (Sprint 0 - Sprint 2)
+import { normalizePhone } from './countryData';
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 // Token and Session Management
@@ -82,6 +83,79 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+export function cleanRawErrorString(msg: string): string {
+  if (!msg) return 'An error occurred.';
+  let cleaned = String(msg).trim();
+
+  // If contains ErrorDetail(...) Python repr
+  const errorDetailMatch = cleaned.match(/ErrorDetail\(string=['"](.*?)['"]/);
+  if (errorDetailMatch && errorDetailMatch[1]) {
+    cleaned = errorDetailMatch[1];
+  }
+
+  // If contains dictionary or array-like string
+  if (
+    (cleaned.startsWith('{') && cleaned.endsWith('}')) ||
+    (cleaned.startsWith('[') && cleaned.endsWith(']'))
+  ) {
+    const innerMatch = cleaned.match(/['"]([A-Za-z0-9][^'"]{2,})['"]/);
+    if (innerMatch && innerMatch[1]) {
+      cleaned = innerMatch[1];
+    }
+  }
+
+  // Strip trailing punctuation quirks or python brackets
+  cleaned = cleaned
+    .replace(/^\[['"]|['"]\]$/g, '')
+    .replace(/^[{\['"]+|[}\]'"]+$/g, '');
+
+  return cleaned || 'An unexpected error occurred.';
+}
+
+export function extractErrorMessage(data: any, status: number): string {
+  if (!data) return `API Error (${status})`;
+  if (typeof data === 'string') {
+    return cleanRawErrorString(data);
+  }
+
+  // Check structured error envelope
+  if (data.error && typeof data.error === 'object') {
+    if (typeof data.error.message === 'string' && data.error.message.trim()) {
+      return cleanRawErrorString(data.error.message);
+    }
+    if (data.error.field_errors && typeof data.error.field_errors === 'object') {
+      const firstVal = Object.values(data.error.field_errors)[0];
+      if (Array.isArray(firstVal) && firstVal.length > 0) {
+        return cleanRawErrorString(String(firstVal[0]));
+      }
+    }
+  }
+
+  if (typeof data.detail === 'string' && data.detail.trim()) {
+    return cleanRawErrorString(data.detail);
+  }
+
+  if (Array.isArray(data.non_field_errors) && data.non_field_errors.length > 0) {
+    return cleanRawErrorString(String(data.non_field_errors[0]));
+  }
+
+  // Iterate top-level object fields (e.g. email, email_or_phone, password, etc.)
+  if (typeof data === 'object' && data !== null) {
+    for (const key of Object.keys(data)) {
+      if (key === 'code' || key === 'request_id') continue;
+      const val = data[key];
+      if (Array.isArray(val) && val.length > 0) {
+        return cleanRawErrorString(String(val[0]));
+      }
+      if (typeof val === 'string' && val.trim()) {
+        return cleanRawErrorString(val);
+      }
+    }
+  }
+
+  return `Request failed (${status}). Please try again.`;
+}
+
 // Generic API request handler
 export async function apiRequest<T>(
   endpoint: string,
@@ -152,13 +226,7 @@ export async function apiRequest<T>(
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const errorMsg =
-        data.detail ||
-        data.error?.message ||
-        (data.email && data.email[0]) ||
-        (data.password && data.password[0]) ||
-        (data.non_field_errors && data.non_field_errors[0]) ||
-        `API Error (${response.status})`;
+      const errorMsg = extractErrorMessage(data, response.status);
       throw new Error(errorMsg);
     }
 
@@ -185,7 +253,7 @@ export const AuthAPI = {
       method: 'POST',
       body: JSON.stringify({
         email: data.email,
-        phone: data.phone_number || undefined,
+        phone: data.phone_number ? normalizePhone(data.phone_number) : undefined,
         password: data.password,
         first_name,
         last_name,
@@ -209,7 +277,7 @@ export const AuthAPI = {
       method: 'POST',
       body: JSON.stringify({
         email: data.email,
-        phone: data.phone_number || undefined,
+        phone: data.phone_number ? normalizePhone(data.phone_number) : undefined,
         password: data.password,
         first_name,
         last_name,

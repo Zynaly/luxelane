@@ -30,6 +30,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   visible, product, onClose, onAddedToCart,
 }) => {
   const [detailedProduct, setDetailedProduct] = useState<Product | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
@@ -39,6 +40,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   useEffect(() => {
     if (visible && product) {
       setDetailedProduct(product);
+      const initialVarId = getProductVariantId(product);
+      setSelectedVariantId(initialVarId || null);
       setActiveImgIndex(0);
       setQuantity(1);
       setAddSuccess(false);
@@ -47,19 +50,25 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       // Fetch full product detail in case partial data was passed from list
       ProductAPI.getProduct(product.id)
         .then((full) => {
-          if (full) setDetailedProduct(full);
+          if (full) {
+            setDetailedProduct(full);
+            const fullVarId = getProductVariantId(full);
+            if (fullVarId) setSelectedVariantId(fullVarId);
+          }
         })
         .catch((err) => console.log('Error fetching full product details:', err));
     } else {
       setDetailedProduct(null);
+      setSelectedVariantId(null);
     }
   }, [visible, product]);
 
   if (!visible || !product) return null;
 
   const current = detailedProduct || product;
+  const selectedVariant = (current.variants || []).find((v: any) => String(v.id) === selectedVariantId);
   const primaryImg = getProductImage(current);
-  const price = parseFloat(getProductPrice(current)) || 0;
+  const price = selectedVariant?.price ? parseFloat(selectedVariant.price) : (parseFloat(getProductPrice(current)) || 0);
   const brandName = typeof current.brand === 'string' ? current.brand : current.brand?.name || 'LUXE';
   const categoryName = typeof current.category === 'string' ? current.category : current.category?.name || 'Luxury Collection';
 
@@ -79,11 +88,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     setAddingToCart(true);
     setErrorMsg(null);
     try {
-      const variantId = getProductVariantId(current);
+      const variantId = selectedVariantId || getProductVariantId(current);
       const res = await CartAPI.addItem(variantId, quantity);
       setAddSuccess(true);
-      if (res && res.item_count !== undefined) {
-        onAddedToCart?.(res.item_count);
+      const count = res?.item_count !== undefined 
+        ? Number(res.item_count) 
+        : (res?.price_breakdown?.item_count !== undefined ? Number(res.price_breakdown.item_count) : null);
+      if (count !== null) {
+        onAddedToCart?.(count);
       } else {
         const summary = await CartAPI.getSummary();
         onAddedToCart?.(summary.item_count || 1);
@@ -201,6 +213,37 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {current.description ||
                 'Impeccably crafted with the finest luxury materials, representing timeless design and unmatched elegance.'}
             </Text>
+
+            {/* Variants / Editions selector if more than 1 variant */}
+            {current.variants && current.variants.length > 1 && (
+              <View style={styles.variantsSection}>
+                <Text style={styles.sectionHeader}>Select Edition</Text>
+                <View style={styles.variantChipsRow}>
+                  {current.variants.map((v: any, idx: number) => {
+                    const vId = String(v.id || idx);
+                    const isSelected = selectedVariantId === vId;
+                    const label = v.sku || `Edition ${idx + 1}`;
+                    return (
+                      <TouchableOpacity
+                        key={vId}
+                        style={[styles.variantChip, isSelected && styles.variantChipSelected]}
+                        onPress={() => setSelectedVariantId(vId)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.variantChipText, isSelected && styles.variantChipTextSelected]}>
+                          {label}
+                        </Text>
+                        {v.price && (
+                          <Text style={[styles.variantChipPrice, isSelected && styles.variantChipPriceSelected]}>
+                            ${parseFloat(v.price).toFixed(2)}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {/* Specifications if any */}
             {current.specifications && Object.keys(current.specifications).length > 0 && (
@@ -477,5 +520,45 @@ const styles = StyleSheet.create({
     minWidth: 24,
     textAlign: 'center',
     color: Colors.textPrimary,
+  },
+  variantsSection: {
+    marginTop: 18,
+  },
+  variantChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  variantChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radii.sm,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.bgSubtle,
+    alignItems: 'center',
+  },
+  variantChipSelected: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accentBg,
+  },
+  variantChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  variantChipTextSelected: {
+    color: Colors.accent,
+    fontWeight: '700',
+  },
+  variantChipPrice: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  variantChipPriceSelected: {
+    color: Colors.accent,
+    fontWeight: '600',
   },
 });
